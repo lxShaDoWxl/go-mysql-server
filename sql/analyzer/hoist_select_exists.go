@@ -113,6 +113,7 @@ func hoistExistSubqueries(scope *Scope, a *Analyzer, filter *plan.Filter, scopeL
 		var joinType plan.JoinType
 		var s *hoistSubquery
 		var err error
+
 		switch e := f.(type) {
 		case *plan.ExistsSubquery:
 			joinType = plan.JoinTypeSemi
@@ -160,7 +161,6 @@ func hoistExistSubqueries(scope *Scope, a *Analyzer, filter *plan.Filter, scopeL
 			panic("expected JoinTypeSemi or JoinTypeAnti")
 		}
 		same = transform.NewTree
-
 	}
 
 	if same {
@@ -197,18 +197,42 @@ func decorrelateOuterCols(e *plan.Subquery, scopeLen int, aliasDisambig *aliasDi
 		if !ok {
 			return n, transform.SameTree, nil
 		}
+
+		child := f.Child
+		childTables := []string{}
+		transform.Inspect(child, func(n sql.Node) bool {
+			switch n := n.(type) {
+			case *plan.TableAlias:
+				childTables = append(childTables, n.Name())
+			case *plan.ResolvedTable:
+				childTables = append(childTables, n.Name())
+			}
+			return true
+		})
+
 		filters := splitConjunction(f.Expression)
 		for _, f := range filters {
 			var outerRef bool
 			transform.InspectExpr(f, func(e sql.Expression) bool {
 				gf, ok := e.(*expression.GetField)
-				if ok && gf.Index() < scopeLen {
-					// has to be from out of scope
-					outerRef = true
-					return true
+				if ok {
+					if gf.Index() < scopeLen {
+						// has to be from out of scope
+						outerRef = true
+						return true
+					} else {
+						// if there are no outer references, check if the filter is referencing a table in the subquery
+						for _, t := range childTables {
+							if gf.Table() == t {
+								outerRef = true
+								return true
+							}
+						}
+					}
 				}
 				return false
 			})
+
 			if outerRef {
 				outerFilters = append(outerFilters, f)
 			} else {
@@ -231,11 +255,13 @@ func decorrelateOuterCols(e *plan.Subquery, scopeLen int, aliasDisambig *aliasDi
 	if err != nil {
 		return nil, err
 	}
+
+	// add good aliases to outsideAliases
 	conflicts, nonConflicted := outsideAliases.findConflicts(nodeAliases)
 	for _, goodAlias := range nonConflicted {
 		target, ok := nodeAliases[goodAlias]
 		if !ok {
-			return nil, fmt.Errorf("node alias %s is not in nodeAliases", goodAlias)
+			return nil, fmt.Errorf("good node alias %s is not in nodeAliases", goodAlias)
 		}
 		nameable := fakeNameable{name: goodAlias}
 		err = outsideAliases.add(nameable, target)
@@ -244,6 +270,7 @@ func decorrelateOuterCols(e *plan.Subquery, scopeLen int, aliasDisambig *aliasDi
 		}
 	}
 
+	// there are conflicts, rename the aliases in the subquery and add the new aliases to outsideAliases
 	if len(conflicts) > 0 {
 		for _, conflict := range conflicts {
 
@@ -280,7 +307,7 @@ func decorrelateOuterCols(e *plan.Subquery, scopeLen int, aliasDisambig *aliasDi
 			// retrieve the new target
 			target, ok := nodeAliases[newAlias]
 			if !ok {
-				return nil, fmt.Errorf("node alias %s is not in nodeAliases", newAlias)
+				return nil, fmt.Errorf("new node alias %s is not in nodeAliases", newAlias)
 			}
 
 			// add the new target to the outside aliases collection

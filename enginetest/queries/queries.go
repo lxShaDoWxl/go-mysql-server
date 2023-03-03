@@ -7154,6 +7154,14 @@ With c as (
 		Query:    "SELECT 4294967296;",
 		Expected: []sql.Row{{int64(4294967296)}},
 	},
+	{
+		Query: "select * from mytable where exists (select * from mytable where i = 1);",
+		Expected: []sql.Row{
+			{1, "first row"},
+			{2, "second row"},
+			{3, "third row"},
+		},
+	},
 }
 
 var KeylessQueries = []QueryTest{
