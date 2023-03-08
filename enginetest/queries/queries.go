@@ -6815,7 +6815,7 @@ var QueryTests = []QueryTest{
 		},
 	},
 	{
-		Query:    `SELECT * FROM two_pk WHERE EXISTS (SELECT pk FROM one_pk WHERE pk > 4)`,
+		Query:    `/*badq*/SELECT * FROM two_pk WHERE EXISTS (SELECT pk FROM one_pk WHERE pk > 4)`,
 		Expected: []sql.Row{},
 	},
 	{

@@ -56,12 +56,18 @@ func TestQueries(t *testing.T, harness Harness) {
 	e := mustNewEngine(t, harness)
 	defer e.Close()
 	ctx := NewContext(harness)
+	e.Analyzer.Debug = true
+	e.Analyzer.Verbose = true
 	for _, tt := range queries.QueryTests {
 		t.Run(tt.Query, func(t *testing.T) {
 			if sh, ok := harness.(SkippingHarness); ok {
 				if sh.SkipQueryTest(tt.Query) {
 					t.Skipf("Skipping query plan for %s", tt.Query)
 				}
+			}
+			shouldDebug := strings.Contains(tt.Query, "badq")
+			if shouldDebug {
+				fmt.Println("Debugging query", tt.Query)
 			}
 			TestQueryWithContext(t, ctx, e, harness, tt.Query, tt.Expected, tt.ExpectedColumns, nil)
 		})

@@ -202,32 +202,163 @@ func TestSingleQueryPrepared(t *testing.T) {
 	enginetest.TestPreparedQuery(t, harness, test.Query, test.Expected, nil)
 }
 
+func TestRenderPlan(t *testing.T) {
+	harness := enginetest.NewMemoryHarness("", 1, testNumPartitions, true, nil)
+	engine, err := harness.NewEngine(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine.Analyzer.Debug = true
+	engine.Analyzer.Verbose = true
+
+	var setupScript setup.SetupScript = []string{
+		"CREATE table xy (x int primary key, y int, index y_idx(y));",
+		"create table rs (r int primary key, s int, index s_idx(s));",
+		"CREATE table uv (u int primary key, v int);",
+		"CREATE table ab (a int primary key, b int);",
+
+		"insert into xy values (1,0), (2,1), (0,2), (3,3);",
+		"insert into rs values (0,0), (1,0), (2,0), (4,4), (5,4);",
+		"insert into uv values (0,1), (1,1), (2,2), (3,2);",
+		"insert into ab values (0,2), (1,2), (2,2), (3,1);",
+	}
+	ctx := enginetest.NewContext(harness)
+	for _, statement := range setupScript {
+		enginetest.RunQueryWithContext(t, engine, harness, ctx, statement)
+	}
+
+	q := "select * from ab where exists (select * from xy where ab.a = 1)"
+
+	t.Run("render plan for "+q, func(t *testing.T) {
+		t.Logf("query: %s", q)
+		ctx = ctx.WithQuery(q)
+
+		a, err := engine.AnalyzeQuery(ctx, q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("node: %s", sql.DebugString(a))
+	})
+}
+
 // Convenience test for debugging a single query. Unskip and set to the desired query.
 func TestSingleScript(t *testing.T) {
-	t.Skip()
 	var scripts = []queries.ScriptTest{
 		{
-			Name: "trigger with signal and user var",
+			Name: "test hoisting",
 			SetUpScript: []string{
-				"create table t1 (id int primary key)",
-				"create table t2 (id int primary key)",
-				`
-create trigger trigger1 before insert on t1
-for each row
-begin
-	set @myvar = concat('bro', 'ken');
-	SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @myvar;
-end;`,
+				"CREATE table xy (x int primary key, y int, index y_idx(y));",
+				"create table rs (r int primary key, s int, index s_idx(s));",
+				"CREATE table uv (u int primary key, v int);",
+				"CREATE table ab (a int primary key, b int);",
+				`create table two_pk (
+    pk1 tinyint,
+    pk2 tinyint,
+    c1 tinyint NOT NULL,
+    c2 tinyint NOT NULL,
+    c3 tinyint NOT NULL,
+    c4 tinyint NOT NULL,
+    c5 tinyint NOT NULL,
+    primary key (pk1, pk2)
+);`,
+				"create table one_pk (pk smallint primary key, c1 smallint, c2 smallint, c3 smallint, c4 smallint, c5 smallint);",
+
+				"insert into xy values (1,0), (2,1), (0,2), (3,3);",
+				"insert into rs values (0,0), (1,0), (2,0), (4,4), (5,4);",
+				"insert into uv values (0,1), (1,1), (2,2), (3,2);",
+				"insert into ab values (0,2), (1,2), (2,2), (3,1);",
+				`insert into two_pk values
+					(0,0,0,1,2,3,4),
+					(0,1,10,11,12,13,14),
+					(1,0,20,21,22,23,24),
+					(1,1,30,31,32,33,34);`,
+				`insert into one_pk values
+    (0,0,1,2,3,4),
+    (1,10,11,12,13,14),
+    (2,20,21,22,23,24),
+    (3,30,31,32,33,34);
+`,
 			},
 			Assertions: []queries.ScriptTestAssertion{
+				//{
+				//	Query:    "SELECT * FROM ab WHERE EXISTS (SELECT * FROM xy WHERE x = 1)",
+				//	Expected: []sql.Row{{}},
+				//},
+				//{
+				//	Query:    "select * from ab cross join (select * from xy limit 1)",
+				//	Expected: []sql.Row{{}},
+				//},
 				{
-					Query:          "insert into t1 values (1)",
-					ExpectedErrStr: "broken (errno 1644) (sqlstate 45000)",
+					//Skip: true, // works
+					// case 1: condition uses columns from both sides
+					Query: "/*case1*/ select * from ab where exists (select * from xy where ab.a = xy.x)",
+					Expected: []sql.Row{
+						{0, 2},
+						{1, 2},
+						{2, 2},
+						{3, 1},
+					},
+				},
+				//{
+				//	// case 2: condition uses columns from left side only
+				//	Query:    "/*case2*/ select * from ab where exists (select * from xy where a = 1)",
+				//	Expected: []sql.Row{},
+				//},
+				//{
+				//	// case 3: condition uses columns from right side only
+				//	Query:    "/*case3*/ select * from ab where exists (select * from xy where 1 = xy.x)",
+				//	Expected: []sql.Row{},
+				//},
+				{
+					//Skip: true, // works
+					// case 4: condition uses no columns from either side, and condition is true
+					Query: "/*case4a*/ select * from ab where exists (select * from xy where 1 = 1)",
+					Expected: []sql.Row{
+						{0, 2},
+						{1, 2},
+						{2, 2},
+						{3, 1}},
 				},
 				{
-					Query:    "select id from t1",
+					//Skip: true, // works
+					// case 4: condition uses no columns from either side, and condition is false
+					Query:    "/*case4b*/ select * from ab where exists (select * from xy where 1 = 0)",
 					Expected: []sql.Row{},
 				},
+				//				{
+				//					Query: `/*OG broken query*/
+				//SELECT COUNT(*)
+				//FROM ab A0
+				//WHERE EXISTS (
+				//    SELECT U0.a
+				//    FROM
+				//    (
+				//        ab U0
+				//        LEFT OUTER JOIN
+				//        xy U1
+				//        ON (U0.a = U1.x)
+				//    )
+				//    WHERE (U1.x IS NULL AND U0.a = A0.a)
+				//);`,
+				//					Expected: []sql.Row{{0}},
+				//				},
+				//{
+				//	Query: `/*testing removing the inner project*/
+				//SELECT COUNT(*)
+				//FROM ab A0
+				//WHERE EXISTS (
+				//   SELECT *
+				//   FROM
+				//   (
+				//       ab U0
+				//       LEFT OUTER JOIN
+				//       xy U1
+				//       ON (U0.a = U1.x)
+				//   )
+				//   WHERE (U1.x IS NULL AND U0.a = A0.a)
+				//);`,
+				//	Expected: []sql.Row{{0}},
+				//},
 			},
 		},
 	}
