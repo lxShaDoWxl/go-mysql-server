@@ -78,17 +78,17 @@ func newAliasDisambiguator(n sql.Node, scope *Scope) *aliasDisambiguator {
 // There are a few cases to consider, all around `CONDITION`. Here are the various possibilities and the equivalent plan.
 //
 //		Case 1: `CONDITION` depends on `LEFT` AND `RIGHT`
-//	  	1. Need to scan both Relations
-//	  	2. Convert to `SemiJoin(LEFT, RIGHT, CONDITION)`
+//	  		1. Need to scan both Relations
+//		  	2. Convert to `SemiJoin(LEFT, RIGHT, CONDITION)`
 //		Case 2: `CONDITION` depends on only `LEFT`
-//	  	1. No need to scan RIGHT, just need to know if there are any rows in RIGHT
-//	  	2. Convert to `Proj(LEFT, CrossJoin(Filter(LEFT, CONDITION), Limit1(RIGHT)))`
+//		  	1. No need to scan RIGHT, just need to know if there are any rows in RIGHT
+//	  		2. Convert to `Proj(LEFT, CrossJoin(Filter(LEFT, CONDITION), Limit1(RIGHT)))`
 //		Case 3: `CONDITION` depends on only `RIGHT`
 //			1. Need to scan both Relations
-//	  	2. Convert to `Proj(LEFT, CrossJoin(LEFT, Limit1(Filter(RIGHT, CONDITION))))`
+//		  	2. Convert to `Proj(LEFT, CrossJoin(LEFT, Limit1(Filter(RIGHT, CONDITION))))`
 //		Case 4: `CONDITION` DOES NOT depend on `LEFT` OR `RIGHT`
-//	  	1. No need to scan RIGHT
-//	  	2. Convert to `Filter(LEFT, CONDITION)`
+//		  	1. No need to scan RIGHT
+//	  		2. Convert to `Filter(LEFT, CONDITION)`
 //
 // If hoisting results in naming conflicts, we will rename the conflicting aliases/tables in the subquery.
 // (Renaming tables/alias in a WHERE EXISTS subquery is perfectly safe, since the subquery results are never actually used.)
