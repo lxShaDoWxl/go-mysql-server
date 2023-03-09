@@ -233,6 +233,9 @@ type relProps struct {
 	outputTables sql.FastIntSet
 
 	card float64
+
+	limit  sql.Expression
+	filter sql.Expression
 }
 
 func newRelProps(rel relExpr) *relProps {
@@ -465,6 +468,8 @@ func (e *exprGroup) String() string {
 			}
 			if e.cost == n.cost()+childCost {
 				b.WriteString(")*")
+			} else {
+				b.WriteString(")")
 			}
 		} else {
 			b.WriteString(")")

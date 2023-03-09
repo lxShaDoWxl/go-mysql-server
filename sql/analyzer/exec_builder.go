@@ -2,7 +2,6 @@ package analyzer
 
 import (
 	"fmt"
-
 	"github.com/dolthub/go-mysql-server/sql"
 	"github.com/dolthub/go-mysql-server/sql/expression"
 	"github.com/dolthub/go-mysql-server/sql/plan"
@@ -99,6 +98,8 @@ func (b *ExecBuilder) buildLookup(l *lookup, input sql.Schema, children ...sql.N
 		case *plan.TableAlias:
 			ret, err = plan.NewIndexedAccessForResolvedTable(n.Child.(*plan.ResolvedTable), plan.NewLookupBuilder(l.index, keyExprs, l.nullmask))
 			ret = plan.NewTableAlias(n.Name(), ret)
+		default:
+			panic(fmt.Sprintf("unexpected lookup child %T", n))
 		}
 		ret = plan.NewSelectSingleRel(n.Select, ret.(sql.NameableNode))
 	case *plan.Distinct:
@@ -108,6 +109,8 @@ func (b *ExecBuilder) buildLookup(l *lookup, input sql.Schema, children ...sql.N
 		case *plan.TableAlias:
 			ret, err = plan.NewIndexedAccessForResolvedTable(n.Child.(*plan.ResolvedTable), plan.NewLookupBuilder(l.index, keyExprs, l.nullmask))
 			ret = plan.NewTableAlias(n.Name(), ret)
+		default:
+			panic(fmt.Sprintf("unexpected lookup child %T", n))
 		}
 		ret = plan.NewDistinct(ret)
 	default:
@@ -162,6 +165,8 @@ func (b *ExecBuilder) buildConcatJoin(j *concatJoin, input sql.Schema, children 
 		rightC = n.Child
 	case *plan.ResolvedTable:
 		name = n.Name()
+	default:
+		panic(fmt.Sprintf("unexpected concat child %T", n))
 	}
 
 	right, err := b.buildLookup(j.concat[0], input, rightC)
@@ -329,7 +334,7 @@ func (b *ExecBuilder) buildTableAlias(r *tableAlias, _ sql.Schema, _ ...sql.Node
 }
 
 func (b *ExecBuilder) buildTableScan(r *tableScan, _ sql.Schema, _ ...sql.Node) (sql.Node, error) {
-	return r.table, nil
+	return b.addFilterAndLimit(r.relBase, r.table), nil
 }
 
 func (b *ExecBuilder) buildSelectSingleRel(r *selectSingleRel, _ sql.Schema, _ ...sql.Node) (sql.Node, error) {
@@ -346,4 +351,16 @@ func (b *ExecBuilder) buildProject(r *project, input sql.Schema, children ...sql
 
 func (b *ExecBuilder) buildDistinct(r *distinct, _ sql.Schema, children ...sql.Node) (sql.Node, error) {
 	return plan.NewDistinct(children[0]), nil
+}
+
+func (b *ExecBuilder) addFilterAndLimit(base *relBase, node sql.Node) sql.Node {
+	relProps := base.g.relProps
+	var result = node
+	if relProps.filter != nil {
+		result = plan.NewFilter(relProps.filter, result)
+	}
+	if relProps.limit != nil {
+		result = plan.NewLimit(relProps.limit, result)
+	}
+	return result
 }

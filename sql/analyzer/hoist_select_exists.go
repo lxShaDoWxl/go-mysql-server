@@ -89,6 +89,8 @@ func newAliasDisambiguator(n sql.Node, scope *Scope) *aliasDisambiguator {
 //		Case 4: `CONDITION` DOES NOT depend on `LEFT` OR `RIGHT`
 //		  	1. No need to scan RIGHT
 //	  		2. Convert to `Filter(LEFT, CONDITION)`
+//			3. Case 4a: `CONDITION` is `true`
+//			4. Case 4b: `CONDITION` is `false`
 //
 // If hoisting results in naming conflicts, we will rename the conflicting aliases/tables in the subquery.
 // (Renaming tables/alias in a WHERE EXISTS subquery is perfectly safe, since the subquery results are never actually used.)
@@ -135,20 +137,25 @@ func hoistExistSubqueries(scope *Scope, a *Analyzer, filter *plan.Filter, aliasD
 
 	switch {
 	// case 1: condition uses columns from both sides
+	//	Convert to `SemiJoin(LEFT, RIGHT, CONDITION)`
 	case hoistInfo.referencesLeft && hoistInfo.referencesRight:
 		result = plan.NewSemiJoin(
 			left,
 			right,
 			condition)
 	// case 2: condition uses columns from left side only
+	//  Convert to `Proj(LEFT, CrossJoin(Filter(LEFT, CONDITION), Limit1(RIGHT)))`
 	case hoistInfo.referencesLeft && !hoistInfo.referencesRight:
 		result =
 			plan.NewProject(
 				expression.SchemaToGetFields(left.Schema()),
 				plan.NewCrossJoin(
 					plan.NewFilter(condition, left),
-					right))
+					plan.NewLimit(
+						expression.NewLiteral(int8(1), types.Int8),
+						right)))
 	// case 3: condition uses columns from right side only
+	//  Convert to `Proj(LEFT, CrossJoin(LEFT, Limit1(Filter(RIGHT, CONDITION))))`
 	case !hoistInfo.referencesLeft && hoistInfo.referencesRight:
 		result =
 			plan.NewProject(
@@ -161,6 +168,7 @@ func hoistExistSubqueries(scope *Scope, a *Analyzer, filter *plan.Filter, aliasD
 							condition,
 							right))))
 	// case 4: condition uses no columns from either side
+	//  Convert to `Filter(LEFT, CONDITION)`
 	case !hoistInfo.referencesLeft && !hoistInfo.referencesRight:
 		result = plan.NewFilter(condition, left)
 	}
@@ -171,7 +179,7 @@ func hoistExistSubqueries(scope *Scope, a *Analyzer, filter *plan.Filter, aliasD
 func renameRightIfNecessary(a *Analyzer, hoistInfo *hoistAnalysis, aliasDisambig *aliasDisambiguator, scope *Scope) error {
 	tryRenameRight := hoistInfo.referencesRight || hoistInfo.referencesLeft
 	tryRenameCondition := hoistInfo.referencesRight
-	if tryRenameRight {
+	if tryRenameRight || tryRenameCondition {
 		right := hoistInfo.right
 		condition := hoistInfo.condition
 
@@ -247,6 +255,9 @@ func renameRightIfNecessary(a *Analyzer, hoistInfo *hoistAnalysis, aliasDisambig
 				return err
 			}
 		}
+
+		hoistInfo.right = right
+		hoistInfo.condition = condition
 	}
 
 	return nil
