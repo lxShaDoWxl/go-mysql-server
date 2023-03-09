@@ -56,8 +56,6 @@ func TestQueries(t *testing.T, harness Harness) {
 	e := mustNewEngine(t, harness)
 	defer e.Close()
 	ctx := NewContext(harness)
-	e.Analyzer.Debug = true
-	e.Analyzer.Verbose = true
 	for _, tt := range queries.QueryTests {
 		t.Run(tt.Query, func(t *testing.T) {
 			if sh, ok := harness.(SkippingHarness); ok {

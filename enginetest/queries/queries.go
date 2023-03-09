@@ -7237,7 +7237,7 @@ With c as (
 	// TODO: uncomment after https://github.com/dolthub/dolt/issues/5522 is fixed
 	//{
 	//	// case 4bN: NOT EXISTS condition uses no columns from either side, and condition is false
-	//	Query:    "/*case4bN*/ select * from ab where exists (select * from xy where 1 = 0)",
+	//	Query:    "/*case4bN*/ select * from ab where not exists (select * from xy where 1 = 0)",
 	//	Expected: []sql.Row{},
 	//},
 	{

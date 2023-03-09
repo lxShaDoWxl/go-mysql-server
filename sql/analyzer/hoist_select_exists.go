@@ -65,31 +65,34 @@ func newAliasDisambiguator(node sql.Node, scope *Scope) *aliasDisambiguator {
 // hoistSelectExists merges a WHERE EXISTS subquery scope with its outer
 // scope when the subquery filters on columns from the outer scope.
 //
-// Consider this plan tree:
+// Consider this (NOT) EXISTS plan tree:
 //
 //	Filter
-//	├─ EXISTS Subquery
+//	├─ (NOT) EXISTS Subquery
 //	│  └─ Filter
 //	│     ├─ (CONDITION)
 //	│     └─ RIGHT
 //	└─ LEFT
 //
-// There are a few cases to consider, all around `CONDITION`. Here are the various possibilities and the equivalent plan.
+// There are a few cases to consider, all around `CONDITION`. Here are the various possibilities and the equivalent plans.
+// Note that for each case we have plan #N (1N, 2N, 3N, 4N) for the cases where the subquery is NOT EXISTS.
 //
-//		Case 1: `CONDITION` depends on `LEFT` AND `RIGHT`
-//	  		1. Need to scan both Relations
-//		  	2. Convert to `SemiJoin(LEFT, RIGHT, CONDITION)`
-//		Case 2: `CONDITION` depends on only `LEFT`
-//		  	1. No need to scan RIGHT, just need to know if there are any rows in RIGHT
-//	  		2. Convert to `Proj(LEFT, CrossJoin(Filter(LEFT, CONDITION), Limit1(RIGHT)))`
-//		Case 3: `CONDITION` depends on only `RIGHT`
-//			1. Need to scan both Relations
-//		  	2. Convert to `Proj(LEFT, CrossJoin(LEFT, Limit1(Filter(RIGHT, CONDITION))))`
-//		Case 4: `CONDITION` DOES NOT depend on `LEFT` OR `RIGHT`
-//		  	1. No need to scan RIGHT
-//	  		2. Convert to `Filter(LEFT, CONDITION)`
-//			3. Case 4a: `CONDITION` is `true`
-//			4. Case 4b: `CONDITION` is `false`
+//			Case 1: `CONDITION` depends on `LEFT` AND `RIGHT`
+//		  		1. Need to scan both Relations
+//			  	2. Convert 1 to `SemiJoin(LEFT, RIGHT, CONDITION)`
+//	            3. Convert 1N to `AntiJoin(LEFT, RIGHT, CONDITION)`
+//			Case 2: `CONDITION` depends on only `LEFT`
+//			  	1. No need to scan RIGHT, just need to know if there are any rows in RIGHT
+//		  		2. Convert 2 to `Proj(LEFT, CrossJoin(Filter(LEFT, CONDITION), Limit1(RIGHT)))`
+//	            3. Convert 2N to `Proj(LEFT, CrossJoin(Filter(LEFT, NOT(CONDITION)), Limit1(RIGHT)))`
+//			Case 3: `CONDITION` depends on only `RIGHT`
+//				1. Need to scan both Relations
+//			  	2. Convert 3 to	`Proj(LEFT, CrossJoin(LEFT, Limit1(Filter(RIGHT, CONDITION))))`
+//	            3. Convert 3N to `AntiJoin(LEFT, Limit1(Filter(RIGHT, CONDITION)), CONDITION)`
+//			Case 4: `CONDITION` DOES NOT depend on `LEFT` OR `RIGHT`
+//			  	1. No need to scan RIGHT
+//		  		2. Convert 4 to `Filter(LEFT, CONDITION)`
+//	            3. Convert 4N to `Filter(LEFT, NOT(CONDITION))`
 //
 // If hoisting results in naming conflicts, we will rename the conflicting aliases/tables in the subquery.
 // (Renaming tables/alias in a WHERE EXISTS subquery is perfectly safe, since the subquery results are never actually used.)
@@ -178,16 +181,12 @@ func hoistExistSubqueries(scope *Scope, a *Analyzer, filter *plan.Filter, aliasD
 			plan.NewFilter(
 				condition,
 				right))
-		var mainJoin sql.Node
 		if isNot {
-			mainJoin = plan.NewAntiJoin(left, rightSide, condition)
+			result = plan.NewAntiJoin(left, rightSide, condition)
 		} else {
-			mainJoin = plan.NewCrossJoin(left, rightSide)
+			result = plan.NewProject(expression.SchemaToGetFields(left.Schema()),
+				plan.NewCrossJoin(left, rightSide))
 		}
-		result =
-			plan.NewProject(
-				expression.SchemaToGetFields(left.Schema()),
-				mainJoin)
 	// case 4: condition uses no columns from either side
 	//  Convert to `Filter(LEFT, CONDITION)`
 	case !hoistInfo.referencesLeft && !hoistInfo.referencesRight:
