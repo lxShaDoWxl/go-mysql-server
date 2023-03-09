@@ -334,7 +334,7 @@ func (b *ExecBuilder) buildTableAlias(r *tableAlias, _ sql.Schema, _ ...sql.Node
 }
 
 func (b *ExecBuilder) buildTableScan(r *tableScan, _ sql.Schema, _ ...sql.Node) (sql.Node, error) {
-	return b.addFilterAndLimit(r.relBase, r.table), nil
+	return r.table, nil
 }
 
 func (b *ExecBuilder) buildSelectSingleRel(r *selectSingleRel, _ sql.Schema, _ ...sql.Node) (sql.Node, error) {
@@ -351,16 +351,4 @@ func (b *ExecBuilder) buildProject(r *project, input sql.Schema, children ...sql
 
 func (b *ExecBuilder) buildDistinct(r *distinct, _ sql.Schema, children ...sql.Node) (sql.Node, error) {
 	return plan.NewDistinct(children[0]), nil
-}
-
-func (b *ExecBuilder) addFilterAndLimit(base *relBase, node sql.Node) sql.Node {
-	relProps := base.g.relProps
-	var result = node
-	if relProps.filter != nil {
-		result = plan.NewFilter(relProps.filter, result)
-	}
-	if relProps.limit != nil {
-		result = plan.NewLimit(relProps.limit, result)
-	}
-	return result
 }

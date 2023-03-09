@@ -343,6 +343,17 @@ func (p *relProps) InputTables() sql.FastIntSet {
 	return p.inputTables
 }
 
+func (p *relProps) addFilterAndLimit(node sql.Node) sql.Node {
+	var result = node
+	if p.filter != nil {
+		result = plan.NewFilter(p.filter, result)
+	}
+	if p.limit != nil {
+		result = plan.NewLimit(p.limit, result)
+	}
+	return result
+}
+
 type tableProps struct {
 	grpToName map[GroupId]string
 	nameToGrp map[string]GroupId

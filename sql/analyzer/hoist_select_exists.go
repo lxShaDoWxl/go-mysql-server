@@ -26,15 +26,14 @@ import (
 )
 
 type aliasDisambiguator struct {
-	n                   sql.Node
-	scope               *Scope
+	node                sql.Node
 	aliases             TableAliases
 	disambiguationIndex int
 }
 
 func (ad *aliasDisambiguator) GetAliases() (TableAliases, error) {
 	if ad.aliases == nil {
-		aliases, err := getTableAliases(ad.n, ad.scope)
+		aliases, err := getTableAliases(ad.node, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -59,8 +58,8 @@ func (ad *aliasDisambiguator) Disambiguate(alias string) (string, error) {
 	}
 }
 
-func newAliasDisambiguator(n sql.Node, scope *Scope) *aliasDisambiguator {
-	return &aliasDisambiguator{n: n, scope: scope}
+func newAliasDisambiguator(node sql.Node, scope *Scope) *aliasDisambiguator {
+	return &aliasDisambiguator{node: node}
 }
 
 // hoistSelectExists merges a WHERE EXISTS subquery scope with its outer
@@ -101,6 +100,8 @@ func hoistSelectExists(
 	scope *Scope,
 	sel RuleSelector,
 ) (sql.Node, transform.TreeIdentity, error) {
+	debug := sql.DebugString(n)
+	a.Log("examining node: \n %s \n", debug)
 	aliasDisambig := newAliasDisambiguator(n, scope)
 
 	return transform.Node(n, func(n sql.Node) (sql.Node, transform.TreeIdentity, error) {
@@ -114,7 +115,15 @@ func hoistSelectExists(
 
 // hoistExistSubqueries looks for a filter WHERE EXISTS, and then attempts to extract the subquery.
 func hoistExistSubqueries(scope *Scope, a *Analyzer, filter *plan.Filter, aliasDisambig *aliasDisambiguator) (sql.Node, transform.TreeIdentity, error) {
+	filterDebug := sql.DebugString(filter)
+	a.Log("examining filter node: \n %s \n", filterDebug)
+
 	exp := filter.Expression
+	not, isNot := exp.(*expression.Not)
+	if isNot {
+		exp = not.Child
+	}
+
 	subquery, ok := exp.(*plan.ExistsSubquery)
 	if !ok {
 		return filter, transform.SameTree, nil
@@ -139,37 +148,52 @@ func hoistExistSubqueries(scope *Scope, a *Analyzer, filter *plan.Filter, aliasD
 	// case 1: condition uses columns from both sides
 	//	Convert to `SemiJoin(LEFT, RIGHT, CONDITION)`
 	case hoistInfo.referencesLeft && hoistInfo.referencesRight:
-		result = plan.NewSemiJoin(
-			left,
-			right,
-			condition)
+		if isNot {
+			result = plan.NewAntiJoin(left, right, condition)
+		} else {
+			result = plan.NewSemiJoin(left, right, condition)
+		}
 	// case 2: condition uses columns from left side only
 	//  Convert to `Proj(LEFT, CrossJoin(Filter(LEFT, CONDITION), Limit1(RIGHT)))`
 	case hoistInfo.referencesLeft && !hoistInfo.referencesRight:
+		var leftFilter sql.Node
+		if isNot {
+			leftFilter = plan.NewFilter(expression.NewNot(condition), left)
+		} else {
+			leftFilter = plan.NewFilter(condition, left)
+		}
 		result =
 			plan.NewProject(
 				expression.SchemaToGetFields(left.Schema()),
 				plan.NewCrossJoin(
-					plan.NewFilter(condition, left),
+					leftFilter,
 					plan.NewLimit(
 						expression.NewLiteral(int8(1), types.Int8),
 						right)))
 	// case 3: condition uses columns from right side only
 	//  Convert to `Proj(LEFT, CrossJoin(LEFT, Limit1(Filter(RIGHT, CONDITION))))`
 	case !hoistInfo.referencesLeft && hoistInfo.referencesRight:
+		rightSide := plan.NewLimit(
+			expression.NewLiteral(int8(1), types.Int8),
+			plan.NewFilter(
+				condition,
+				right))
+		var mainJoin sql.Node
+		if isNot {
+			mainJoin = plan.NewAntiJoin(left, rightSide, condition)
+		} else {
+			mainJoin = plan.NewCrossJoin(left, rightSide)
+		}
 		result =
 			plan.NewProject(
 				expression.SchemaToGetFields(left.Schema()),
-				plan.NewCrossJoin(
-					left,
-					plan.NewLimit(
-						expression.NewLiteral(int8(1), types.Int8),
-						plan.NewFilter(
-							condition,
-							right))))
+				mainJoin)
 	// case 4: condition uses no columns from either side
 	//  Convert to `Filter(LEFT, CONDITION)`
 	case !hoistInfo.referencesLeft && !hoistInfo.referencesRight:
+		if isNot {
+			condition = expression.NewNot(condition)
+		}
 		result = plan.NewFilter(condition, left)
 	}
 

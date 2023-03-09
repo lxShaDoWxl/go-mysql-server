@@ -65,10 +65,6 @@ func TestQueries(t *testing.T, harness Harness) {
 					t.Skipf("Skipping query plan for %s", tt.Query)
 				}
 			}
-			shouldDebug := strings.Contains(tt.Query, "badq")
-			if shouldDebug {
-				fmt.Println("Debugging query", tt.Query)
-			}
 			TestQueryWithContext(t, ctx, e, harness, tt.Query, tt.Expected, tt.ExpectedColumns, nil)
 		})
 	}

@@ -76,14 +76,24 @@ func TestMemoGen(t *testing.T) {
         }
 
         func buildRelExpr(b *ExecBuilder, r relExpr, input sql.Schema, children ...sql.Node) (sql.Node, error) {
+          var result sql.Node
+		  var err error
+
           switch r := r.(type) {
           case *hashJoin:
-          return b.buildHashJoin(r, input, children...)
+            result, err = b.buildHashJoin(r, input, children...)
           case *tableScan:
-          return b.buildTableScan(r, input, children...)
+            result, err = b.buildTableScan(r, input, children...)
           default:
             panic(fmt.Sprintf("unknown relExpr type: %T", r))
           }
+
+          if err != nil {
+            return nil, err
+          }
+
+          result = r.group().relProps.addFilterAndLimit(result)
+          return result, nil
         }
 		`,
 	}
