@@ -202,47 +202,9 @@ func TestSingleQueryPrepared(t *testing.T) {
 	enginetest.TestPreparedQuery(t, harness, test.Query, test.Expected, nil)
 }
 
-func TestRenderPlan(t *testing.T) {
-	harness := enginetest.NewMemoryHarness("", 1, testNumPartitions, true, nil)
-	engine, err := harness.NewEngine(t)
-	if err != nil {
-		t.Fatal(err)
-	}
-	engine.Analyzer.Debug = true
-	engine.Analyzer.Verbose = true
-
-	var setupScript setup.SetupScript = []string{
-		"CREATE table xy (x int primary key, y int, index y_idx(y));",
-		"create table rs (r int primary key, s int, index s_idx(s));",
-		"CREATE table uv (u int primary key, v int);",
-		"CREATE table ab (a int primary key, b int);",
-
-		"insert into xy values (1,0), (2,1), (0,2), (3,3);",
-		"insert into rs values (0,0), (1,0), (2,0), (4,4), (5,4);",
-		"insert into uv values (0,1), (1,1), (2,2), (3,2);",
-		"insert into ab values (0,2), (1,2), (2,2), (3,1);",
-	}
-	ctx := enginetest.NewContext(harness)
-	for _, statement := range setupScript {
-		enginetest.RunQueryWithContext(t, engine, harness, ctx, statement)
-	}
-
-	q := "select * from ab where exists (select * from xy where ab.a = 1)"
-
-	t.Run("render plan for "+q, func(t *testing.T) {
-		t.Logf("query: %s", q)
-		ctx = ctx.WithQuery(q)
-
-		a, err := engine.AnalyzeQuery(ctx, q)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Logf("node: %s", sql.DebugString(a))
-	})
-}
-
 // Convenience test for debugging a single query. Unskip and set to the desired query.
 func TestSingleScript(t *testing.T) {
+	t.Skip()
 	var scripts = []queries.ScriptTest{
 		{
 			Name: "test hoisting",
@@ -280,85 +242,23 @@ func TestSingleScript(t *testing.T) {
 `,
 			},
 			Assertions: []queries.ScriptTestAssertion{
-				//{
-				//	Query:    "SELECT * FROM ab WHERE EXISTS (SELECT * FROM xy WHERE x = 1)",
-				//	Expected: []sql.Row{{}},
-				//},
-				//{
-				//	Query:    "select * from ab cross join (select * from xy limit 1)",
-				//	Expected: []sql.Row{{}},
-				//},
 				{
-					//Skip: true, // works
-					// case 1: condition uses columns from both sides
-					Query: "/*case1*/ select * from ab where exists (select * from xy where ab.a = xy.x)",
-					Expected: []sql.Row{
-						{0, 2},
-						{1, 2},
-						{2, 2},
-						{3, 1},
-					},
+					Query: `/*OG broken query*/
+				SELECT COUNT(*)
+				FROM ab A0
+				WHERE EXISTS (
+				   SELECT U0.a
+				   FROM
+				   (
+				       ab U0
+				       LEFT OUTER JOIN
+				       xy U1
+				       ON (U0.a = U1.x)
+				   )
+				   WHERE (U1.x IS NULL AND U0.a = A0.a)
+				);`,
+					Expected: []sql.Row{{0}},
 				},
-				//{
-				//	// case 2: condition uses columns from left side only
-				//	Query:    "/*case2*/ select * from ab where exists (select * from xy where a = 1)",
-				//	Expected: []sql.Row{},
-				//},
-				//{
-				//	// case 3: condition uses columns from right side only
-				//	Query:    "/*case3*/ select * from ab where exists (select * from xy where 1 = xy.x)",
-				//	Expected: []sql.Row{},
-				//},
-				{
-					//Skip: true, // works
-					// case 4: condition uses no columns from either side, and condition is true
-					Query: "/*case4a*/ select * from ab where exists (select * from xy where 1 = 1)",
-					Expected: []sql.Row{
-						{0, 2},
-						{1, 2},
-						{2, 2},
-						{3, 1}},
-				},
-				{
-					//Skip: true, // works
-					// case 4: condition uses no columns from either side, and condition is false
-					Query:    "/*case4b*/ select * from ab where exists (select * from xy where 1 = 0)",
-					Expected: []sql.Row{},
-				},
-				//				{
-				//					Query: `/*OG broken query*/
-				//SELECT COUNT(*)
-				//FROM ab A0
-				//WHERE EXISTS (
-				//    SELECT U0.a
-				//    FROM
-				//    (
-				//        ab U0
-				//        LEFT OUTER JOIN
-				//        xy U1
-				//        ON (U0.a = U1.x)
-				//    )
-				//    WHERE (U1.x IS NULL AND U0.a = A0.a)
-				//);`,
-				//					Expected: []sql.Row{{0}},
-				//				},
-				//{
-				//	Query: `/*testing removing the inner project*/
-				//SELECT COUNT(*)
-				//FROM ab A0
-				//WHERE EXISTS (
-				//   SELECT *
-				//   FROM
-				//   (
-				//       ab U0
-				//       LEFT OUTER JOIN
-				//       xy U1
-				//       ON (U0.a = U1.x)
-				//   )
-				//   WHERE (U1.x IS NULL AND U0.a = A0.a)
-				//);`,
-				//	Expected: []sql.Row{{0}},
-				//},
 			},
 		},
 	}

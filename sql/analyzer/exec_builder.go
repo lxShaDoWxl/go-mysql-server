@@ -99,8 +99,6 @@ func (b *ExecBuilder) buildLookup(l *lookup, input sql.Schema, children ...sql.N
 		case *plan.TableAlias:
 			ret, err = plan.NewIndexedAccessForResolvedTable(n.Child.(*plan.ResolvedTable), plan.NewLookupBuilder(l.index, keyExprs, l.nullmask))
 			ret = plan.NewTableAlias(n.Name(), ret)
-		default:
-			panic(fmt.Sprintf("unexpected lookup child %T", n))
 		}
 		ret = plan.NewSelectSingleRel(n.Select, ret.(sql.NameableNode))
 	case *plan.Distinct:
@@ -110,8 +108,6 @@ func (b *ExecBuilder) buildLookup(l *lookup, input sql.Schema, children ...sql.N
 		case *plan.TableAlias:
 			ret, err = plan.NewIndexedAccessForResolvedTable(n.Child.(*plan.ResolvedTable), plan.NewLookupBuilder(l.index, keyExprs, l.nullmask))
 			ret = plan.NewTableAlias(n.Name(), ret)
-		default:
-			panic(fmt.Sprintf("unexpected lookup child %T", n))
 		}
 		ret = plan.NewDistinct(ret)
 	default:
@@ -166,8 +162,6 @@ func (b *ExecBuilder) buildConcatJoin(j *concatJoin, input sql.Schema, children 
 		rightC = n.Child
 	case *plan.ResolvedTable:
 		name = n.Name()
-	default:
-		panic(fmt.Sprintf("unexpected concat child %T", n))
 	}
 
 	right, err := b.buildLookup(j.concat[0], input, rightC)
