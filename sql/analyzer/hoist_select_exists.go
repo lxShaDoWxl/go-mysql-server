@@ -203,86 +203,87 @@ func hoistExistSubqueries(scope *Scope, a *Analyzer, filter *plan.Filter, aliasD
 func renameRightIfNecessary(a *Analyzer, hoistInfo *hoistAnalysis, aliasDisambig *aliasDisambiguator, scope *Scope) error {
 	tryRenameRight := hoistInfo.referencesRight || hoistInfo.referencesLeft
 	tryRenameCondition := hoistInfo.referencesRight
-	if tryRenameRight || tryRenameCondition {
-		right := hoistInfo.right
-		condition := hoistInfo.condition
+	if !tryRenameRight && !tryRenameCondition {
+		return nil
+	}
+	right := hoistInfo.right
+	condition := hoistInfo.condition
 
-		// get outside aliases
-		outsideAliases, err := aliasDisambig.GetAliases()
+	// get outside aliases
+	outsideAliases, err := aliasDisambig.GetAliases()
+	if err != nil {
+		return err
+	}
+	// get right aliases
+	rightAliases, err := getTableAliases(right, scope)
+	if err != nil {
+		return err
+	}
+
+	// find conflicting and non-conflicting aliases
+	conflicted, nonConflicted := outsideAliases.findConflicts(rightAliases)
+
+	// add non-conflicting aliases to the outside scope
+	for _, alias := range nonConflicted {
+		target, ok := rightAliases[alias]
+		if !ok {
+			panic(fmt.Sprintf("alias %s not found", alias))
+		}
+		err = outsideAliases.add(fakeNameable{name: alias}, target)
 		if err != nil {
 			return err
 		}
-		// get right aliases
-		rightAliases, err := getTableAliases(right, scope)
+	}
+
+	// disambiguate conflicting aliases
+	var same transform.TreeIdentity
+	for _, alias := range conflicted {
+		// conflict, need to get a new alias
+		newAlias, err := aliasDisambig.Disambiguate(alias)
 		if err != nil {
 			return err
 		}
-
-		// find conflicting and non-conflicting aliases
-		conflicted, nonConflicted := outsideAliases.findConflicts(rightAliases)
-
-		// add non-conflicting aliases to the outside scope
-		for _, alias := range nonConflicted {
-			target, ok := rightAliases[alias]
-			if !ok {
-				panic(fmt.Sprintf("alias %s not found", alias))
-			}
-			err = outsideAliases.add(fakeNameable{name: alias}, target)
-			if err != nil {
-				return err
-			}
+		// rename the alias in the right subtree
+		right, same, err = renameAliases(right, alias, newAlias)
+		if err != nil {
+			return err
+		}
+		if same {
+			return fmt.Errorf("tree is unchanged after trying to rename alias %s to %s in subtree %s",
+				alias, newAlias, sql.DebugString(right))
 		}
 
-		// disambiguate conflicting aliases
-		var same transform.TreeIdentity
-		for _, alias := range conflicted {
-			// conflict, need to get a new alias
-			newAlias, err := aliasDisambig.Disambiguate(alias)
-			if err != nil {
-				return err
-			}
-			// rename the alias in the right subtree
-			right, same, err = renameAliases(right, alias, newAlias)
+		// rename the alias in the condition, if necessary
+		if tryRenameCondition {
+			condition, same, err = renameAliasesInExp(condition, alias, newAlias)
 			if err != nil {
 				return err
 			}
 			if same {
-				return fmt.Errorf("tree is unchanged after trying to rename alias %s to %s in subtree %s",
-					alias, newAlias, sql.DebugString(right))
-			}
-
-			// rename the alias in the condition, if necessary
-			if tryRenameCondition {
-				condition, same, err = renameAliasesInExp(condition, alias, newAlias)
-				if err != nil {
-					return err
-				}
-				if same {
-					return fmt.Errorf("tree is unchanged after trying to rename alias %s to %s in expression %s",
-						alias, newAlias, condition.String())
-				}
-			}
-
-			// get updated aliases from the right subtree
-			newAliases, err := getTableAliases(right, scope)
-			if err != nil {
-				return err
-			}
-			// find new renamed target from the right subtree
-			target, ok := newAliases[newAlias]
-			if !ok {
-				panic(fmt.Sprintf("alias %s not found", newAlias))
-			}
-			// add the new alias to the outside scope
-			err = outsideAliases.add(fakeNameable{name: newAlias}, target)
-			if err != nil {
-				return err
+				return fmt.Errorf("tree is unchanged after trying to rename alias %s to %s in expression %s",
+					alias, newAlias, condition.String())
 			}
 		}
 
-		hoistInfo.right = right
-		hoistInfo.condition = condition
+		// get updated aliases from the right subtree
+		newAliases, err := getTableAliases(right, scope)
+		if err != nil {
+			return err
+		}
+		// find new renamed target from the right subtree
+		target, ok := newAliases[newAlias]
+		if !ok {
+			panic(fmt.Sprintf("alias %s not found", newAlias))
+		}
+		// add the new alias to the outside scope
+		err = outsideAliases.add(fakeNameable{name: newAlias}, target)
+		if err != nil {
+			return err
+		}
 	}
+
+	hoistInfo.right = right
+	hoistInfo.condition = condition
 
 	return nil
 }
