@@ -103,8 +103,6 @@ func hoistSelectExists(
 	scope *Scope,
 	sel RuleSelector,
 ) (sql.Node, transform.TreeIdentity, error) {
-	debug := sql.DebugString(n)
-	a.Log("examining node: \n %s \n", debug)
 	aliasDisambig := newAliasDisambiguator(n, scope)
 
 	return transform.Node(n, func(n sql.Node) (sql.Node, transform.TreeIdentity, error) {
@@ -118,9 +116,6 @@ func hoistSelectExists(
 
 // hoistExistSubqueries looks for a filter WHERE EXISTS, and then attempts to extract the subquery.
 func hoistExistSubqueries(scope *Scope, a *Analyzer, filter *plan.Filter, aliasDisambig *aliasDisambiguator) (sql.Node, transform.TreeIdentity, error) {
-	filterDebug := sql.DebugString(filter)
-	a.Log("examining filter node: \n %s \n", filterDebug)
-
 	exp := filter.Expression
 	not, isNot := exp.(*expression.Not)
 	if isNot {
