@@ -107,8 +107,8 @@ func simplifyPartialJoinParents(n sql.Node) sql.Node {
 func hoistExistSubqueries(scope *Scope, a *Analyzer, filter *plan.Filter, scopeLen int, aliasDisambig *aliasDisambiguator) (sql.Node, transform.TreeIdentity, error) {
 
 	ret := filter.Child
-	var retFilters []sql.Expression
 	same := transform.SameTree
+	var result sql.Node
 	for _, f := range splitConjunction(filter.Expression) {
 		var joinType plan.JoinType
 		var s *hoistSubquery
@@ -133,29 +133,31 @@ func hoistExistSubqueries(scope *Scope, a *Analyzer, filter *plan.Filter, scopeL
 		}
 
 		if s == nil {
-			retFilters = append(retFilters, f)
 			continue
 		}
 
 		// if we reached here, |s| contains the state we need to
 		// decorrelate the subquery expression into a new node
-		outerFilters, _, err := FixFieldIndexesOnExpressions(scope, a, append(ret.Schema(), s.inner.Schema()...), s.outerFilters...)
+		joinFilters, _, err := FixFieldIndexesOnExpressions(scope, a, append(ret.Schema(), s.inner.Schema()...), s.outerFilters...)
 		if err != nil {
 			return filter, transform.SameTree, err
 		}
-
-		retFilters = append(retFilters, s.innerFilters...)
 
 		var comment string
 		if c, ok := ret.(sql.CommentedNode); ok {
 			comment = c.Comment()
 		}
 
+		right := s.inner
+		if len(s.innerFilters) > 0 {
+			right = plan.NewFilter(expression.JoinAnd(s.innerFilters...), right)
+		}
+
 		switch joinType {
 		case plan.JoinTypeAnti:
-			ret = plan.NewAntiJoin(ret, s.inner, expression.JoinAnd(outerFilters...)).WithComment(comment)
+			result = plan.NewAntiJoin(ret, right, expression.JoinAnd(joinFilters...)).WithComment(comment)
 		case plan.JoinTypeSemi:
-			ret = plan.NewSemiJoin(ret, s.inner, expression.JoinAnd(outerFilters...)).WithComment(comment)
+			result = plan.NewSemiJoin(ret, right, expression.JoinAnd(joinFilters...)).WithComment(comment)
 		default:
 			panic("expected JoinTypeSemi or JoinTypeAnti")
 		}
@@ -166,11 +168,8 @@ func hoistExistSubqueries(scope *Scope, a *Analyzer, filter *plan.Filter, scopeL
 	if same {
 		return filter, transform.SameTree, nil
 	}
-	if len(retFilters) > 0 {
-		ret = plan.NewFilter(expression.JoinAnd(retFilters...), ret)
-	}
-	log.Debug(sql.DebugString(ret))
-	return ret, transform.NewTree, nil
+	log.Debug(sql.DebugString(result))
+	return result, transform.NewTree, nil
 }
 
 type hoistSubquery struct {

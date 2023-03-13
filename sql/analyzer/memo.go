@@ -233,6 +233,9 @@ type relProps struct {
 	outputTables sql.FastIntSet
 
 	card float64
+
+	limit  sql.Expression
+	filter sql.Expression
 }
 
 func newRelProps(rel relExpr) *relProps {
@@ -338,6 +341,17 @@ func (p *relProps) OutputTables() sql.FastIntSet {
 // InputTables returns a bitmap of tables input into this node.
 func (p *relProps) InputTables() sql.FastIntSet {
 	return p.inputTables
+}
+
+func (p *relProps) addFilterAndLimit(node sql.Node) sql.Node {
+	var result = node
+	if p.filter != nil {
+		result = plan.NewFilter(p.filter, result)
+	}
+	if p.limit != nil {
+		result = plan.NewLimit(p.limit, result)
+	}
+	return result
 }
 
 type tableProps struct {

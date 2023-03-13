@@ -204,29 +204,71 @@ func TestSingleQueryPrepared(t *testing.T) {
 
 // Convenience test for debugging a single query. Unskip and set to the desired query.
 func TestSingleScript(t *testing.T) {
-	t.Skip()
 	var scripts = []queries.ScriptTest{
 		{
 			Name: "trigger with signal and user var",
 			SetUpScript: []string{
-				"create table t1 (id int primary key)",
-				"create table t2 (id int primary key)",
-				`
-create trigger trigger1 before insert on t1
-for each row
-begin
-	set @myvar = concat('bro', 'ken');
-	SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @myvar;
-end;`,
+				"CREATE table xy (x int primary key, y int, index y_idx(y));",
+				"create table rs (r int primary key, s int, index s_idx(s));",
+				"CREATE table uv (u int primary key, v int);",
+				"CREATE table ab (a int primary key, b int);",
+				`create table two_pk (
+    pk1 tinyint,
+    pk2 tinyint,
+    c1 tinyint NOT NULL,
+    c2 tinyint NOT NULL,
+    c3 tinyint NOT NULL,
+    c4 tinyint NOT NULL,
+    c5 tinyint NOT NULL,
+    primary key (pk1, pk2)
+);`,
+				"create table one_pk (pk smallint primary key, c1 smallint, c2 smallint, c3 smallint, c4 smallint, c5 smallint);",
+
+				"insert into xy values (1,0), (2,1), (0,2), (3,3);",
+				"insert into rs values (0,0), (1,0), (2,0), (4,4), (5,4);",
+				"insert into uv values (0,1), (1,1), (2,2), (3,2);",
+				"insert into ab values (0,2), (1,2), (2,2), (3,1);",
+				`insert into two_pk values
+					(0,0,0,1,2,3,4),
+					(0,1,10,11,12,13,14),
+					(1,0,20,21,22,23,24),
+					(1,1,30,31,32,33,34);`,
+				`insert into one_pk values
+    (0,0,1,2,3,4),
+    (1,10,11,12,13,14),
+    (2,20,21,22,23,24),
+    (3,30,31,32,33,34);`,
 			},
 			Assertions: []queries.ScriptTestAssertion{
 				{
-					Query:          "insert into t1 values (1)",
-					ExpectedErrStr: "broken (errno 1644) (sqlstate 45000)",
+					// case 2N: NOT EXISTS condition uses columns from left side only
+					Query: "/*case2N*/ select * from ab where not exists (select * from xy where a = 1)",
+					Expected: []sql.Row{
+						{0, 2},
+						{2, 2},
+						{3, 1},
+					},
 				},
 				{
-					Query:    "select id from t1",
+					Query:    "SELECT * FROM two_pk WHERE EXISTS (SELECT pk FROM one_pk WHERE pk > 4)",
 					Expected: []sql.Row{},
+				},
+				{
+					Query: `/*OG broken query*/
+SELECT COUNT(*)
+FROM ab A0
+WHERE EXISTS (
+	SELECT U0.a
+	FROM
+	(
+		ab U0
+		LEFT OUTER JOIN
+		xy U1
+		ON (U0.a = U1.x)
+	)
+	WHERE (U1.x IS NULL AND U0.a = A0.a)
+);`,
+					Expected: []sql.Row{{0}},
 				},
 			},
 		},
