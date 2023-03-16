@@ -67,7 +67,21 @@ type AlterIndex struct {
 	Comment string
 	// DisableKeys determines whether to DISABLE KEYS if true or ENABLE KEYS if false
 	DisableKeys bool
+
+	targetSchema sql.Schema
 }
+
+// NM4
+func (p AlterIndex) WithTargetSchema(schema sql.Schema) (sql.Node, error) {
+	p.targetSchema = schema
+	return &p, nil
+}
+
+func (p *AlterIndex) TargetSchema() sql.Schema {
+	return p.targetSchema
+}
+
+var _ sql.SchemaTarget = (*AlterIndex)(nil)
 
 func NewAlterCreateIndex(db sql.Database, table sql.Node, indexName string, using sql.IndexUsing, constraint sql.IndexConstraint, columns []sql.IndexColumn, comment string) *AlterIndex {
 	return &AlterIndex{
@@ -195,7 +209,9 @@ func (p *AlterIndex) Execute(ctx *sql.Context) error {
 		if !ok || p.Constraint != sql.IndexConstraint_Unique {
 			return nil
 		}
-		sch := sql.SchemaToPrimaryKeySchema(table, table.Schema())
+
+		// NM4
+		sch := sql.SchemaToPrimaryKeySchema(table, p.targetSchema)
 		inserter, err := rwt.RewriteInserter(ctx, sch, sch, nil, nil, p.Columns)
 		if err != nil {
 			return err
@@ -291,7 +307,7 @@ func (p *AlterIndex) WithChildren(children ...sql.Node) (sql.Node, error) {
 
 	switch p.Action {
 	case IndexAction_Create:
-		return NewAlterCreateIndex(p.db, children[0], p.IndexName, p.Using, p.Constraint, p.Columns, p.Comment), nil
+		return p.copyForWithChild(children[0]), nil
 	case IndexAction_Drop:
 		return NewAlterDropIndex(p.db, children[0], p.IndexName), nil
 	case IndexAction_Rename:
@@ -301,6 +317,12 @@ func (p *AlterIndex) WithChildren(children ...sql.Node) (sql.Node, error) {
 	default:
 		return nil, ErrIndexActionNotImplemented.New(p.Action)
 	}
+}
+
+// NM4 Copy all the shiz.
+func (p AlterIndex) copyForWithChild(child sql.Node) sql.Node {
+	p.Table = child
+	return &p
 }
 
 // CheckPrivileges implements the interface sql.Node.

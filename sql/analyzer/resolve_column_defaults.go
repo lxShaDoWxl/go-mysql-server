@@ -831,6 +831,35 @@ func parseColumnDefaults(ctx *sql.Context, _ *Analyzer, n sql.Node, _ *Scope, _ 
 			}
 
 			return nn, transform.SameTree, err
+		case *plan.AlterIndex:
+			alterIdx, ok := n.(*plan.AlterIndex)
+			if !ok {
+				// Will this ever happen? NM4
+				return nn, transform.SameTree, nil
+			}
+
+			newSchema := make([]*sql.Column, len(alterIdx.TargetSchema()))
+			for i, col := range alterIdx.TargetSchema() {
+				newSchema[i] = col
+				if col.Default != nil {
+					if ucd, ok := col.Default.Expression.(sql.UnresolvedColumnDefault); ok {
+						resolvedDefault, err := parse.StringToColumnDefaultValue(ctx, ucd.String())
+						if err != nil {
+							panic("Handle this? Return without changes?")
+						}
+
+						col.Default = resolvedDefault
+
+						newSchema[i] = col
+					}
+				}
+			}
+			newNode, err := alterIdx.WithTargetSchema(newSchema)
+			if err != nil {
+				panic("wtf")
+			}
+
+			return newNode, transform.NewTree, nil
 		default:
 			return parseDefaultsForNode(ctx, nn)
 		}
