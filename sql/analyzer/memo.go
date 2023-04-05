@@ -422,7 +422,28 @@ func sortedColsForRel(rel relExpr) sql.Schema {
 			for _, i := range ords {
 				pks = append(pks, tab.PrimaryKeySchema().Schema[i])
 			}
-			return pks
+			ia, ok := r.table.Table.(sql.IndexAddressable)
+			if !ok {
+				return nil
+			}
+			indexes, err := ia.GetIndexes(rel.group().m.ctx)
+			if err != nil {
+				return nil
+			}
+			for _, idx := range indexes {
+				isPk := true
+				for i, e := range idx.Expressions() {
+					if !strings.EqualFold(e, fmt.Sprintf("%s.%s", pks[i].Source, pks[i].Name)) {
+						isPk = false
+					}
+				}
+				if isPk {
+					if _, ok := idx.(sql.OrderedIndex); ok {
+						return pks
+					}
+					break
+				}
+			}
 		}
 	case *mergeJoin:
 		var ret sql.Schema
