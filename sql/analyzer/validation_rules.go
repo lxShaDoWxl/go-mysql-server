@@ -85,68 +85,74 @@ var (
 	)
 )
 
+var ErrInvalidCheck = fmt.Errorf("error validating check")
+
+type ValidatorFunc = func(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error)
+
+type semError struct{ error }
+
 // validateLimitAndOffset ensures that only integer literals are used for limit and offset values
 func validateLimitAndOffset(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
-	var err error
 	var i, i64 interface{}
-	transform.Inspect(n, func(n sql.Node) bool {
+	err := transform.InspectWithError(n, func(n sql.Node) (bool, error) {
+		var err error
 		switch n := n.(type) {
 		case *plan.Limit:
 			switch e := n.Limit.(type) {
 			case *expression.Literal:
 				if !types.IsInteger(e.Type()) {
 					err = sql.ErrInvalidType.New(e.Type().String())
-					return false
+					return false, err
 				}
 				i, err = e.Eval(ctx, nil)
 				if err != nil {
-					return false
+					return false, err
 				}
 
 				i64, _, err = types.Int64.Convert(i)
 				if err != nil {
-					return false
+					return false, err
 				}
 				if i64.(int64) < 0 {
 					err = sql.ErrInvalidSyntax.New("negative limit")
-					return false
+					return false, err
 				}
 			case *expression.BindVar:
-				return true
+				return true, nil
 			default:
 				err = sql.ErrInvalidType.New(e.Type().String())
-				return false
+				return false, err
 			}
 		case *plan.Offset:
 			switch e := n.Offset.(type) {
 			case *expression.Literal:
 				if !types.IsInteger(e.Type()) {
 					err = sql.ErrInvalidType.New(e.Type().String())
-					return false
+					return false, err
 				}
 				i, err = e.Eval(ctx, nil)
 				if err != nil {
-					return false
+					return false, err
 				}
 
 				i64, _, err = types.Int64.Convert(i)
 				if err != nil {
-					return false
+					return false, err
 				}
 				if i64.(int64) < 0 {
 					err = sql.ErrInvalidSyntax.New("negative offset")
-					return false
+					return false, err
 				}
 			case *expression.BindVar:
-				return true
+				return true, nil
 			default:
 				err = sql.ErrInvalidType.New(e.Type().String())
-				return false
+				return false, err
 			}
 		default:
-			return true
+			return true, nil
 		}
-		return true
+		return true, nil
 	})
 	return n, transform.SameTree, err
 }
@@ -164,14 +170,15 @@ func validateIsResolved(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope,
 
 // unresolvedError returns an appropriate error message for the unresolved node given
 func unresolvedError(n sql.Node) error {
-	var err error
-	var walkFn func(sql.Expression) bool
-	walkFn = func(e sql.Expression) bool {
+	var walkFn func(sql.Expression) (bool, error)
+	walkFn = func(e sql.Expression) (bool, error) {
+		var err error
+
 		switch e := e.(type) {
 		case *plan.Subquery:
-			transform.InspectExpressions(e.Query, walkFn)
+			transform.InspectExpressionsWithError(e.Query, walkFn)
 			if err != nil {
-				return false
+				return false, err
 			}
 		case *deferredColumn:
 			if e.Table() != "" {
@@ -179,11 +186,11 @@ func unresolvedError(n sql.Node) error {
 			} else {
 				err = sql.ErrColumnNotFound.New(e.Name())
 			}
-			return false
+			return false, err
 		}
-		return true
+		return true, nil
 	}
-	transform.InspectExpressions(n, walkFn)
+	err := transform.InspectExpressionsWithError(n, walkFn)
 
 	if err != nil {
 		return err
@@ -323,29 +330,28 @@ func validateGroupBy(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, se
 		return n, transform.SameTree, nil
 	}
 
-	var err error
 	var parent sql.Node
-	transform.Inspect(n, func(n sql.Node) bool {
+	err := transform.InspectWithError(n, func(n sql.Node) (bool, error) {
 		defer func() {
 			parent = n
 		}()
 
 		gb, ok := n.(*plan.GroupBy)
 		if !ok {
-			return true
+			return true, nil
 		}
 
 		switch parent.(type) {
 		case *plan.Having, *plan.Project, *plan.Sort:
 			// TODO: these shouldn't be skipped; you can group by primary key without problem b/c only one value
 			// https://dev.mysql.com/doc/refman/8.0/en/group-by-handling.html#:~:text=The%20query%20is%20valid%20if%20name%20is%20a%20primary%20key
-			return true
+			return true, nil
 		}
 
 		// Allow the parser use the GroupBy node to eval the aggregation functions
 		// for sql statements that don't make use of the GROUP BY expression.
 		if len(gb.GroupByExprs) == 0 {
-			return true
+			return true, nil
 		}
 
 		var groupBys []string
@@ -356,12 +362,12 @@ func validateGroupBy(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, se
 		for _, expr := range gb.SelectedExprs {
 			if _, ok := expr.(sql.Aggregation); !ok {
 				if !expressionReferencesOnlyGroupBys(groupBys, expr) {
-					err = ErrValidationGroupBy.New(expr.String())
-					return false
+					err := ErrValidationGroupBy.New(expr.String())
+					return false, err
 				}
 			}
 		}
-		return true
+		return true, nil
 	})
 
 	return n, transform.SameTree, err
