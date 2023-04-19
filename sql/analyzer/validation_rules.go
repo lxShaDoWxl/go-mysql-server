@@ -538,14 +538,15 @@ func validateOperands(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, s
 
 	// We do not use plan.InspectExpressions here because we're treating
 	// top-level expressions of sql.Node differently from subexpressions.
-	var err error
-	transform.Inspect(n, func(n sql.Node) bool {
+
+	err := transform.InspectWithError(n, func(n sql.Node) (bool, error) {
+		var err error
 		if n == nil {
-			return false
+			return false, nil
 		}
 
 		if plan.IsDDLNode(n) {
-			return false
+			return false, nil
 		}
 
 		if er, ok := n.(sql.Expressioner); ok {
@@ -554,17 +555,17 @@ func validateOperands(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, s
 				if nc != 1 {
 					if _, ok := er.(*plan.HashLookup); ok {
 						// hash lookup expressions are tuples with >= 1 columns
-						return true
+						return true, nil
 					}
 					err = sql.ErrInvalidOperandColumns.New(1, nc)
-					return false
+					return false, err
 				}
-				sql.Inspect(e, func(e sql.Expression) bool {
+				sql.InspectWithError(e, func(e sql.Expression) (bool, error) {
 					if e == nil {
-						return err == nil
+						return err == nil, err
 					}
 					if err != nil {
-						return false
+						return false, err
 					}
 					switch e.(type) {
 					case *plan.InSubquery, *expression.Equals, *expression.NullSafeEquals, *expression.GreaterThan,
@@ -578,14 +579,16 @@ func validateOperands(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, s
 						} else {
 							err = types.ErrIfMismatchedColumnsInTuple(e.Children()[0].Type(), e.Children()[1].Type())
 						}
+						return false, err
 					case *aggregation.Count, *aggregation.CountDistinct, *aggregation.JsonArray:
 						if _, s := e.Children()[0].(*expression.Star); s {
-							return false
+							return false, nil
 						}
 						for _, e := range e.Children() {
 							nc := types.NumColumns(e.Type())
 							if nc != 1 {
 								err = sql.ErrInvalidOperandColumns.New(1, nc)
+								return false, err
 							}
 						}
 					case expression.Tuple:
@@ -597,14 +600,15 @@ func validateOperands(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, s
 							nc := types.NumColumns(e.Type())
 							if nc != 1 {
 								err = sql.ErrInvalidOperandColumns.New(1, nc)
+								return false, err
 							}
 						}
 					}
-					return err == nil
+					return err == nil, err
 				})
 			}
 		}
-		return err == nil
+		return err == nil, err
 	})
 	if err != nil {
 		return nil, transform.SameTree, err
@@ -926,10 +930,10 @@ func findFirstWindowAggregationColumnReference(w *plan.Window) (index int, gf *e
 }
 
 func validateExprSem(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
-	var err error
-	transform.InspectExpressions(n, func(e sql.Expression) bool {
+	err := transform.InspectExpressionsWithError(n, func(e sql.Expression) (bool, error) {
+		var err error
 		err = validateSem(e)
-		return err == nil
+		return err == nil, err
 	})
 	return n, transform.SameTree, err
 }
