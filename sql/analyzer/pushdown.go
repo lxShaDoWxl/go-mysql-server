@@ -15,7 +15,6 @@
 package analyzer
 
 import (
-	"github.com/dolthub/go-mysql-server/sql/fixidx"
 	"strings"
 
 	"github.com/dolthub/go-mysql-server/sql"
@@ -63,7 +62,7 @@ func exprHasBindVar(expr sql.Expression) bool {
 // bitmaps tracking table dependencies. The same processes here should
 // be applied there: 1) filter pushdown to table, 2) filter pushdown to
 // join node, 3) range scan indexes applied to non-lookup tables.
-func pushdownFilters(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func pushdownFilters(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	span, ctx := ctx.Span("pushdown_filters")
 	defer span.End()
 
@@ -91,7 +90,7 @@ func pushdownFilters(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scop
 	})
 }
 
-func pushdownFiltersAtNode(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func pushdownFiltersAtNode(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	indexes, err := getIndexesByTable(ctx, a, n, scope)
 	if err != nil {
 		return nil, transform.SameTree, err
@@ -116,7 +115,7 @@ func pushdownFiltersAtNode(ctx *sql.Context, a *Analyzer, n sql.Node, scope *pla
 
 // pushdownSubqueryAliasFilters attempts to push conditions in filters down to
 // individual subquery aliases.
-func pushdownSubqueryAliasFilters(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func pushdownSubqueryAliasFilters(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	span, ctx := ctx.Span("pushdown_subquery_alias_filters")
 	defer span.End()
 
@@ -210,7 +209,7 @@ func filterPushdownAboveTablesChildSelector(c transform.Context) bool {
 	return true
 }
 
-func transformPushdownFilters(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, tableAliases TableAliases, indexes indexLookupsByTable, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func transformPushdownFilters(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, tableAliases TableAliases, indexes indexLookupsByTable, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	applyFilteredTables := func(n *plan.Filter, filters *filterSet) (sql.Node, transform.TreeIdentity, error) {
 		return transform.NodeWithCtx(n, filterPushdownChildSelector, func(c transform.Context) (sql.Node, transform.TreeIdentity, error) {
 			switch node := c.Node.(type) {
@@ -345,7 +344,7 @@ func transformPushdownFilters(ctx *sql.Context, a *Analyzer, n sql.Node, scope *
 	})
 }
 
-func transformPushdownSubqueryAliasFilters(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, tableAliases TableAliases) (sql.Node, transform.TreeIdentity, error) {
+func transformPushdownSubqueryAliasFilters(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, tableAliases TableAliases) (sql.Node, transform.TreeIdentity, error) {
 	var filters *filterSet
 
 	transformFilterNode := func(n *plan.Filter) (sql.Node, transform.TreeIdentity, error) {
@@ -382,7 +381,7 @@ func convertFiltersToIndexedAccess(
 	ctx *sql.Context,
 	a *Analyzer,
 	n sql.Node,
-	scope *plan.Scope,
+	scope *Scope,
 	indexes indexLookupsByTable,
 ) (sql.Node, transform.TreeIdentity, error) {
 	childSelector := func(c transform.Context) bool {
@@ -451,7 +450,7 @@ func convertFiltersToIndexedAccess(
 					return n, transform.SameTree, nil
 				}
 
-				newExprs, same, err := fixidx.FixFieldIndexesOnExpressions(scope, a.LogFn(), table.Schema(), ita.Expressions()...)
+				newExprs, same, err := FixFieldIndexesOnExpressions(scope, a, table.Schema(), ita.Expressions()...)
 				if err != nil {
 					return nil, transform.SameTree, err
 				}
@@ -476,7 +475,7 @@ func convertFiltersToIndexedAccess(
 			if sameTab {
 				return c.Node, transform.SameTree, nil
 			}
-			n, _, err := fixidx.FixFieldIndexesForTableNode(ctx, a.LogFn(), table, scope)
+			n, _, err := FixFieldIndexesForTableNode(ctx, a, table, scope)
 			if err != nil {
 				return nil, transform.SameTree, err
 			}
@@ -498,7 +497,7 @@ func getPredicateExprsHandledByLookup(ctx *sql.Context, a *Analyzer, idxTable *p
 		return nil, nil
 	}
 
-	idxFilters := expression.SplitConjunction(lookup.expr)
+	idxFilters := splitConjunction(lookup.expr)
 	if len(idxFilters) == 0 {
 		return nil, nil
 	}
@@ -524,7 +523,7 @@ func pushdownFiltersToTable(
 	ctx *sql.Context,
 	a *Analyzer,
 	tableNode sql.NameableNode,
-	scope *plan.Scope,
+	scope *Scope,
 	filters *filterSet,
 	tableAliases TableAliases,
 ) (sql.Node, transform.TreeIdentity, error) {
@@ -553,7 +552,7 @@ func pushdownFiltersToTable(
 	handledFilters := getHandledFilters(ctx, tableNode.Name(), ft, tableAliases, filters)
 	filters.markFiltersHandled(handledFilters...)
 
-	handledFilters, _, err := fixidx.FixFieldIndexesOnExpressions(scope, a.LogFn(), tableNode.Schema(), handledFilters...)
+	handledFilters, _, err := FixFieldIndexesOnExpressions(scope, a, tableNode.Schema(), handledFilters...)
 	if err != nil {
 		return nil, transform.SameTree, err
 	}
@@ -600,7 +599,7 @@ func pushdownFiltersToAboveTable(
 	ctx *sql.Context,
 	a *Analyzer,
 	tableNode sql.NameableNode,
-	scope *plan.Scope,
+	scope *Scope,
 	filters *filterSet,
 ) (sql.Node, transform.TreeIdentity, error) {
 	table := getTable(tableNode)
@@ -613,7 +612,7 @@ func pushdownFiltersToAboveTable(
 	if tableFilters := filters.availableFiltersForTable(ctx, tableNode.Name()); len(tableFilters) > 0 {
 		filters.markFiltersHandled(tableFilters...)
 
-		handled, _, err := fixidx.FixFieldIndexesOnExpressions(scope, a.LogFn(), tableNode.Schema(), tableFilters...)
+		handled, _, err := FixFieldIndexesOnExpressions(scope, a, tableNode.Schema(), tableFilters...)
 		if err != nil {
 			return nil, transform.SameTree, err
 		}
@@ -660,7 +659,7 @@ func pushdownFiltersUnderSubqueryAlias(ctx *sql.Context, a *Analyzer, sa *plan.S
 	}
 	filters.markFiltersHandled(handled...)
 	schema := sa.Schema()
-	handled, _, err := fixidx.FixFieldIndexesOnExpressions(nil, a.LogFn(), schema, handled...)
+	handled, _, err := FixFieldIndexesOnExpressions(nil, a, schema, handled...)
 	if err != nil {
 		return nil, transform.SameTree, err
 	}
@@ -728,7 +727,7 @@ func removePushedDownPredicates(ctx *sql.Context, a *Analyzer, node *plan.Filter
 	}
 
 	// figure out if the filter's filters were all handled
-	filterExpressions := expression.SplitConjunction(node.Expression)
+	filterExpressions := splitConjunction(node.Expression)
 	unhandled := subtractExprSet(filterExpressions, filters.handledFilters)
 	if len(unhandled) == 0 {
 		a.Log("filter node has no unhandled filters, so it will be removed")
@@ -751,7 +750,7 @@ func removePushedDownPredicates(ctx *sql.Context, a *Analyzer, node *plan.Filter
 }
 
 // getIndexesByTable returns applicable index lookups for each table named in the query node given
-func getIndexesByTable(ctx *sql.Context, a *Analyzer, node sql.Node, scope *plan.Scope) (indexLookupsByTable, error) {
+func getIndexesByTable(ctx *sql.Context, a *Analyzer, node sql.Node, scope *Scope) (indexLookupsByTable, error) {
 	indexSpan, ctx := ctx.Span("getIndexesByTable")
 	defer indexSpan.End()
 
@@ -809,7 +808,7 @@ func getIndexesByTable(ctx *sql.Context, a *Analyzer, node sql.Node, scope *plan
 	return indexes, nil
 }
 
-func replacePkSortHelper(ctx *sql.Context, scope *plan.Scope, node sql.Node, sortNode *plan.Sort) (sql.Node, transform.TreeIdentity, error) {
+func replacePkSortHelper(ctx *sql.Context, scope *Scope, node sql.Node, sortNode *plan.Sort) (sql.Node, transform.TreeIdentity, error) {
 	switch n := node.(type) {
 	case *plan.Sort:
 		sortNode = n // TODO: this only preserves the most recent Sort node
@@ -924,7 +923,7 @@ func replacePkSortHelper(ctx *sql.Context, scope *plan.Scope, node sql.Node, sor
 }
 
 // replacePkSort applies an IndexAccess when there is an `OrderBy` over a prefix of any `PrimaryKey`s
-func replacePkSort(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func replacePkSort(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	return replacePkSortHelper(ctx, scope, n, nil)
 }
 
@@ -943,10 +942,10 @@ func convertIsNullForIndexes(ctx *sql.Context, e sql.Expression) sql.Expression 
 
 // pushdownFixIndices fixes field indices for non-join expressions (replanJoin
 // is responsible for join filters and conditions.)
-func pushdownFixIndices(a *Analyzer, n sql.Node, scope *plan.Scope) (sql.Node, transform.TreeIdentity, error) {
+func pushdownFixIndices(a *Analyzer, n sql.Node, scope *Scope) (sql.Node, transform.TreeIdentity, error) {
 	switch n := n.(type) {
 	case *plan.JoinNode, *plan.HashLookup:
 		return n, transform.SameTree, nil
 	}
-	return fixidx.FixFieldIndexesForExpressions(a.LogFn(), n, scope)
+	return FixFieldIndexesForExpressions(a, n, scope)
 }

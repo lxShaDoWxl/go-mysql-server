@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package memo
+package analyzer
 
 import (
 	"fmt"
 	"math"
 	"math/bits"
 	"strings"
+
+	"github.com/dolthub/go-mysql-server/sql/transform"
 
 	"github.com/dolthub/go-mysql-server/sql"
 	"github.com/dolthub/go-mysql-server/sql/expression"
@@ -80,7 +82,7 @@ import (
 // We build applicability rules before exhaustive enumeration to filter valid
 // plans. We consider a reordering valid by checking:
 //
-// 1) Transform compatibility: a Lookup table between two join operator types
+// 1) Transform compatibility: a lookup table between two join operator types
 //
 // 2) Eligibility sets: left and right subtree dependencies required for a
 // valid reordering. The syntactic eligibility set (SES) is the table
@@ -131,25 +133,25 @@ type joinOrderBuilder struct {
 	//
 	// The group for a single base relation is the base relation itself.
 	m             *Memo
-	plans         map[vertexSet]*ExprGroup
+	plans         map[vertexSet]*exprGroup
 	edges         []edge
-	vertices      []RelExpr
-	vertexGroups  []GroupId
+	vertices      []relExpr
+	vertexNames   []string
 	innerEdges    edgeSet
 	nonInnerEdges edgeSet
-	newPlanCb     func(j *joinOrderBuilder, rel RelExpr)
+	newPlanCb     func(j *joinOrderBuilder, rel relExpr)
 }
 
-func NewJoinOrderBuilder(memo *Memo) *joinOrderBuilder {
+func newJoinOrderBuilder(memo *Memo) *joinOrderBuilder {
 	return &joinOrderBuilder{
-		plans:        make(map[vertexSet]*ExprGroup),
-		m:            memo,
-		vertices:     make([]RelExpr, 0),
-		vertexGroups: make([]GroupId, 0),
+		plans:       make(map[vertexSet]*exprGroup),
+		m:           memo,
+		vertices:    make([]relExpr, 0),
+		vertexNames: make([]string, 0),
 	}
 }
 
-func (j *joinOrderBuilder) ReorderJoin(n sql.Node) {
+func (j *joinOrderBuilder) reorderJoin(n sql.Node) {
 	j.populateSubgraph(n)
 	j.dbSube()
 }
@@ -157,17 +159,18 @@ func (j *joinOrderBuilder) ReorderJoin(n sql.Node) {
 // populateSubgraph recursively tracks new join nodes as edges and new
 // leaf nodes as vertices to the joinOrderBuilder graph, returning
 // the subgraph's newly tracked vertices and edges.
-func (j *joinOrderBuilder) populateSubgraph(n sql.Node) (vertexSet, edgeSet, *ExprGroup) {
-	var group *ExprGroup
+func (j *joinOrderBuilder) populateSubgraph(n sql.Node) (vertexSet, edgeSet, *exprGroup) {
+	var group *exprGroup
 	startV := j.allVertices()
 	startE := j.allEdges()
 	// build operator
 	switch n := n.(type) {
 	case *plan.Filter:
-		return j.buildFilter(n)
+		_, _, group = j.populateSubgraph(n.Child)
+		group.relProps.filter = n.Expression
 	case *plan.Limit:
 		_, _, group = j.populateSubgraph(n.Child)
-		group.RelProps.limit = n.Limit
+		group.relProps.limit = n.Limit
 	case *plan.JoinNode:
 		group = j.buildJoinOp(n)
 	case sql.Nameable:
@@ -182,7 +185,7 @@ func (j *joinOrderBuilder) populateSubgraph(n sql.Node) (vertexSet, edgeSet, *Ex
 	return j.allVertices().difference(startV), j.allEdges().Difference(startE), group
 }
 
-func (j *joinOrderBuilder) buildJoinOp(n *plan.JoinNode) *ExprGroup {
+func (j *joinOrderBuilder) buildJoinOp(n *plan.JoinNode) *exprGroup {
 	leftV, leftE, _ := j.populateSubgraph(n.Left())
 	rightV, rightE, _ := j.populateSubgraph(n.Right())
 	typ := n.JoinType()
@@ -198,90 +201,69 @@ func (j *joinOrderBuilder) buildJoinOp(n *plan.JoinNode) *ExprGroup {
 		rightEdges:    rightE,
 	}
 
-	filters := expression.SplitConjunction(n.JoinCond())
-	filterGrps := make([]ScalarExpr, len(filters))
-	for i, f := range filters {
-		grp := j.m.MemoizeScalar(f)
-		filterGrps[i] = grp.Scalar
-	}
+	filters := splitConjunction(n.JoinCond())
+
 	union := leftV.union(rightV)
 	group, ok := j.plans[union]
 	if !ok {
 		// TODO: memo and root should be initialized prior to join planning
 		left := j.plans[leftV]
 		right := j.plans[rightV]
-		group = j.memoize(op.joinType, left, right, filterGrps, nil)
+		group = j.memoize(op.joinType, left, right, filters, nil)
 		j.plans[union] = group
 		j.m.root = group
 	}
 
 	if !isInner {
-		j.buildNonInnerEdge(op, filterGrps...)
+		j.buildNonInnerEdge(op, filters...)
 	} else {
-		j.buildInnerEdge(op, filterGrps...)
+		j.buildInnerEdge(op, filters...)
 	}
 	return group
 }
 
-func (j *joinOrderBuilder) buildFilter(n *plan.Filter) (vertexSet, edgeSet, *ExprGroup) {
-	// memoize child
-	childV, childE, childGrp := j.populateSubgraph(n.Child)
-	// memoize filter components for simple filters
-	var filterGroups []*ExprGroup
-	for _, f := range expression.SplitConjunction(n.Expression) {
-		filterGroups = append(filterGroups, j.m.MemoizeScalar(f))
-	}
-
-	// TODO if child is a filter, combine filters
-	filterGrp := j.m.MemoizeFilter(nil, childGrp, filterGroups)
-
-	// filter will absorb child relation for join reordering
-	j.plans[childV] = filterGrp
-	return childV, childE, filterGrp
-}
-
-func (j *joinOrderBuilder) buildJoinLeaf(n sql.Nameable) *ExprGroup {
+func (j *joinOrderBuilder) buildJoinLeaf(n sql.Nameable) *exprGroup {
 	j.checkSize()
 
-	var rel SourceRel
+	var rel relExpr
 	b := &relBase{}
 	switch n := n.(type) {
 	case *plan.ResolvedTable:
-		rel = &TableScan{relBase: b, Table: n}
+		rel = &tableScan{relBase: b, table: n}
 	case *plan.TableAlias:
-		rel = &TableAlias{relBase: b, Table: n}
+		rel = &tableAlias{relBase: b, table: n}
 	case *plan.RecursiveTable:
-		rel = &RecursiveTable{relBase: b, Table: n}
+		rel = &recursiveTable{relBase: b, table: n}
 	case *plan.SubqueryAlias:
-		rel = &SubqueryAlias{relBase: b, Table: n}
+		rel = &subqueryAlias{relBase: b, table: n}
 	case *plan.Max1Row:
-		rel = &Max1Row{relBase: b, Table: n}
+		rel = &max1Row{relBase: b, table: n}
 	case *plan.RecursiveCte:
-		rel = &RecursiveCte{relBase: b, Table: n}
+		rel = &recursiveCte{relBase: b, table: n}
 	case *plan.IndexedTableAccess:
-		rel = &TableScan{relBase: b, Table: n.ResolvedTable}
+		rel = &tableScan{relBase: b, table: n.ResolvedTable}
 	case *plan.ValueDerivedTable:
-		rel = &Values{relBase: b, Table: n}
+		rel = &values{relBase: b, table: n}
 	case sql.TableFunction:
-		rel = &TableFunc{relBase: b, Table: n}
+		rel = &tableFunc{relBase: b, table: n}
 	case *plan.EmptyTable:
-		rel = &EmptyTable{relBase: b, Table: n}
+		rel = &emptyTable{relBase: b, table: n}
 	default:
 		panic(fmt.Sprintf("unrecognized join leaf: %T", n))
 	}
 
 	j.vertices = append(j.vertices, rel)
+	j.vertexNames = append(j.vertexNames, n.Name())
 
 	// Initialize the plan for this vertex.
 	idx := vertexIndex(len(j.vertices) - 1)
 	relSet := vertexSet(0).add(idx)
-	grp := j.m.memoizeSourceRel(rel)
+	grp := j.m.memoize(rel)
 	j.plans[relSet] = grp
-	j.vertexGroups = append(j.vertexGroups, grp.Id)
 	return grp
 }
 
-func (j *joinOrderBuilder) buildInnerEdge(op *operator, filters ...ScalarExpr) {
+func (j *joinOrderBuilder) buildInnerEdge(op *operator, filters ...sql.Expression) {
 	if len(filters) == 0 {
 		// cross join
 		j.edges = append(j.edges, *j.makeEdge(op, filters...))
@@ -294,13 +276,13 @@ func (j *joinOrderBuilder) buildInnerEdge(op *operator, filters ...ScalarExpr) {
 	}
 }
 
-func (j *joinOrderBuilder) buildNonInnerEdge(op *operator, filters ...ScalarExpr) {
+func (j *joinOrderBuilder) buildNonInnerEdge(op *operator, filters ...sql.Expression) {
 	// only single edge for non-inner
 	j.edges = append(j.edges, *j.makeEdge(op, filters...))
 	j.nonInnerEdges.Add(len(j.edges) - 1)
 }
 
-func (j *joinOrderBuilder) makeEdge(op *operator, filters ...ScalarExpr) *edge {
+func (j *joinOrderBuilder) makeEdge(op *operator, filters ...sql.Expression) *edge {
 	// edge is an instance of operator with a unique set of transform rules depending
 	// on the subset of filters used
 	e := &edge{
@@ -312,7 +294,7 @@ func (j *joinOrderBuilder) makeEdge(op *operator, filters ...ScalarExpr) *edge {
 	// TODO: validate malformed join clauses like `ab join xy on a = u`
 	// prior to join planning, execBuilder currently throws getField errors
 	// for these
-	e.populateEdgeProps(j.allVertices(), j.vertexGroups, j.edges)
+	e.populateEdgeProps(j.allVertices(), j.vertexNames, j.edges)
 	return e
 }
 
@@ -373,7 +355,7 @@ func (j *joinOrderBuilder) addPlans(s1, s2 vertexSet) {
 	//TODO collect functional dependencies to avoid redundant filters
 	//TODO relational nodes track functional dependencies
 
-	var innerJoinFilters []ScalarExpr
+	var innerJoinFilters []sql.Expression
 	var addInnerJoin bool
 	var isRedundant bool
 	for i, ok := j.innerEdges.Next(0); ok; i, ok = j.innerEdges.Next(i + 1) {
@@ -416,7 +398,7 @@ func (j *joinOrderBuilder) addPlans(s1, s2 vertexSet) {
 	}
 }
 
-func (j *joinOrderBuilder) addJoin(op plan.JoinType, s1, s2 vertexSet, joinFilter, selFilters []ScalarExpr, isRedundant bool) {
+func (j *joinOrderBuilder) addJoin(op plan.JoinType, s1, s2 vertexSet, joinFilter, selFilters []sql.Expression, isRedundant bool) {
 	if s1.intersects(s2) {
 		panic("sets are not disjoint")
 	}
@@ -442,57 +424,57 @@ func (j *joinOrderBuilder) addJoin(op plan.JoinType, s1, s2 vertexSet, joinFilte
 // addJoinToGroup adds a new plan to existing groups
 func (j *joinOrderBuilder) addJoinToGroup(
 	op plan.JoinType,
-	left *ExprGroup,
-	right *ExprGroup,
-	joinFilter []ScalarExpr,
-	selFilter []ScalarExpr,
-	group *ExprGroup,
+	left *exprGroup,
+	right *exprGroup,
+	joinFilter []sql.Expression,
+	selFilter []sql.Expression,
+	group *exprGroup,
 ) {
 	rel := j.constructJoin(op, left, right, joinFilter, group)
-	group.Prepend(rel)
+	group.prepend(rel)
 	return
 }
 
 // memoize
 func (j *joinOrderBuilder) memoize(
 	op plan.JoinType,
-	left *ExprGroup,
-	right *ExprGroup,
-	joinFilter []ScalarExpr,
-	selFilter []ScalarExpr,
-) *ExprGroup {
+	left *exprGroup,
+	right *exprGroup,
+	joinFilter []sql.Expression,
+	selFilter []sql.Expression,
+) *exprGroup {
 	rel := j.constructJoin(op, left, right, joinFilter, nil)
-	return j.m.NewExprGroup(rel)
+	return j.m.memoize(rel)
 }
 
 func (j *joinOrderBuilder) constructJoin(
 	op plan.JoinType,
-	left *ExprGroup,
-	right *ExprGroup,
-	joinFilter []ScalarExpr,
-	group *ExprGroup,
-) RelExpr {
-	var rel RelExpr
-	b := &JoinBase{
-		Op:      op,
+	left *exprGroup,
+	right *exprGroup,
+	joinFilter []sql.Expression,
+	group *exprGroup,
+) relExpr {
+	var rel relExpr
+	b := &joinBase{
+		op:      op,
 		relBase: &relBase{g: group},
-		Left:    left,
-		Right:   right,
-		Filter:  joinFilter,
+		left:    left,
+		right:   right,
+		filter:  joinFilter,
 	}
 	switch op {
 	case plan.JoinTypeCross:
-		rel = &CrossJoin{b}
+		rel = &crossJoin{b}
 	case plan.JoinTypeInner:
-		rel = &InnerJoin{b}
+		rel = &innerJoin{b}
 	case plan.JoinTypeFullOuter:
-		rel = &FullOuterJoin{b}
+		rel = &fullOuterJoin{b}
 	case plan.JoinTypeLeftOuter:
-		rel = &LeftJoin{b}
-	case plan.JoinTypeSemi:
-		rel = &SemiJoin{b}
+		rel = &leftJoin{b}
+	case plan.JoinTypeSemi, plan.JoinTypeRightSemi:
+		rel = &semiJoin{b}
 	case plan.JoinTypeAnti:
-		rel = &AntiJoin{b}
+		rel = &antiJoin{b}
 	default:
 		panic(fmt.Sprintf("unexpected join type: %s", op))
 	}
@@ -552,8 +534,8 @@ type edge struct {
 
 	// filters is the set of join filters that will be used to construct new join
 	// ON conditions.
-	filters  []ScalarExpr
-	freeVars sql.ColSet
+	filters  []sql.Expression
+	freeVars []*expression.GetField
 
 	// nullRejectedRels is the set of vertexes on which nulls are rejected by the
 	// filters. We do not set any nullRejectedRels currently, which is not accurate
@@ -575,18 +557,21 @@ type edge struct {
 	rules []conflictRule
 }
 
-func (e *edge) populateEdgeProps(allV vertexSet, vertexes []GroupId, edges []edge) {
-	var tables sql.FastIntSet
-	var cols sql.ColSet
-	var nullAccepting []ScalarExpr
+func (e *edge) populateEdgeProps(allV vertexSet, allNames []string, edges []edge) {
+	var cols []*expression.GetField
+	var nullAccepting []sql.Expression
 	if len(e.filters) > 0 {
 		for _, e := range e.filters {
-			sProps := e.Group().ScalarProps()
-			cols = cols.Union(sProps.Cols)
-			tables = tables.Union(sProps.Tables)
-			if !sProps.nullRejecting {
-				nullAccepting = append(nullAccepting, e)
-			}
+			transform.InspectExpr(e, func(e sql.Expression) bool {
+				switch e := e.(type) {
+				case *expression.GetField:
+					cols = append(cols, e)
+				case *expression.NullSafeEquals, *expression.IsNull:
+					nullAccepting = append(nullAccepting, e)
+				default:
+				}
+				return false
+			})
 		}
 	}
 
@@ -596,7 +581,7 @@ func (e *edge) populateEdgeProps(allV vertexSet, vertexes []GroupId, edges []edg
 	//e.nullRejectedRels = e.nullRejectingTables(nullAccepting, allNames, allV)
 
 	//SES is vertexSet of all tables referenced in cols
-	e.calcSES(tables, vertexes)
+	e.calcSES(cols, allNames)
 	// use CD-C to expand dependency sets for operators
 	// front load preventing applicable operators that would push crossjoins
 	e.calcTES(edges)
@@ -614,7 +599,11 @@ func (e *edge) String() string {
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString(fmt.Sprintf("  - free vars: %s\n", e.freeVars.String()))
+	freeVars := make([]string, len(e.freeVars))
+	for i, v := range e.freeVars {
+		freeVars[i] = v.String()
+	}
+	b.WriteString(fmt.Sprintf("  - free vars: %s\n", e.freeVars))
 	b.WriteString(fmt.Sprintf("  - ses: %s\n", e.ses.String()))
 	b.WriteString(fmt.Sprintf("  - tes: %s\n", e.tes.String()))
 	b.WriteString(fmt.Sprintf("  - nullRej: %s\n", e.nullRejectedRels.String()))
@@ -639,22 +628,18 @@ func (e *edge) String() string {
 //
 // Refer to https://dl.acm.org/doi/10.1145/244810.244812 for more examples.
 // TODO implement this
-func (e *edge) nullRejectingTables(nullAccepting []ScalarExpr, allNames []string, allV vertexSet) vertexSet {
+func (e *edge) nullRejectingTables(nullAccepting []sql.Expression, allNames []string, allV vertexSet) vertexSet {
 	panic("not implemented")
 }
 
 // calcSES updates the syntactic eligibility set for an edge. An SES
 // represents all tables this edge's filters requires as input.
-func (e *edge) calcSES(tables sql.FastIntSet, vertexes []GroupId) {
+func (e *edge) calcSES(cols []*expression.GetField, allNames []string) {
 	ses := vertexSet(0)
-	for i, ok := tables.Next(0); ok; i, ok = tables.Next(i + 1) {
-		// tables are GroupIds
-		// go from GroupId -> vertex
-		grpId := GroupId(i + 1)
-		for j, grp := range vertexes {
-			if grpId == grp {
-				ses = ses.add(vertexIndex(j))
-				break
+	for _, e := range cols {
+		for i, n := range allNames {
+			if n == e.Table() {
+				ses = ses.add(vertexIndex(i))
 			}
 		}
 	}
@@ -935,7 +920,7 @@ type conflictRule struct {
 	to   vertexSet
 }
 
-// lookupTableEntry is an entry in one of the join property Lookup tables
+// lookupTableEntry is an entry in one of the join property lookup tables
 // defined below (associative, left-asscom and right-asscom properties). A
 // lookupTableEntry can be unconditionally true or false, as well as true
 // conditional on the null-rejecting properties of the edge filters.
@@ -1003,7 +988,7 @@ const (
 	table3Note4 = (filterA | filterB) | rejectsOnRightB
 )
 
-// assocTable is a Lookup table indicating whether it is correct to apply the
+// assocTable is a lookup table indicating whether it is correct to apply the
 // associative transformation to pairs of join operators.
 // citations: [8] table 2
 var assocTable = [7][7]lookupTableEntry{
@@ -1017,7 +1002,7 @@ var assocTable = [7][7]lookupTableEntry{
 	/* group-A  */ {never, never, never, never, never, never, never},
 }
 
-// leftAsscomTable is a Lookup table indicating whether it is correct to apply
+// leftAsscomTable is a lookup table indicating whether it is correct to apply
 // the left-asscom transformation to pairs of join operators.
 // citations: [8] table 3
 var leftAsscomTable = [7][7]lookupTableEntry{
@@ -1031,7 +1016,7 @@ var leftAsscomTable = [7][7]lookupTableEntry{
 	/* group-A */ {always, always, always, always, always, never, always},
 }
 
-// rightAsscomTable is a Lookup table indicating whether it is correct to apply
+// rightAsscomTable is a lookup table indicating whether it is correct to apply
 // the right-asscom transformation to pairs of join operators.
 // citations: [8] table 3
 var rightAsscomTable = [7][7]lookupTableEntry{
@@ -1046,7 +1031,7 @@ var rightAsscomTable = [7][7]lookupTableEntry{
 }
 
 // checkProperty returns true if the transformation represented by the given
-// property Lookup table is allowed for the two given edges. Note that while
+// property lookup table is allowed for the two given edges. Note that while
 // most table entries are either true or false, some are conditionally true,
 // depending on the null-rejecting properties of the edge filters (for example,
 // association for two full joins).
@@ -1094,7 +1079,7 @@ func checkProperty(table [7][7]lookupTableEntry, edgeA, edgeB *edge) bool {
 	return true
 }
 
-// getOpIdx returns an index into the join property static Lookup tables given an edge
+// getOpIdx returns an index into the join property static lookup tables given an edge
 // with an associated edge type. I originally used int(joinType), but this is fragile
 // to reordering the type definitions.
 func getOpIdx(e *edge) int {
@@ -1103,7 +1088,7 @@ func getOpIdx(e *edge) int {
 		return 0
 	case plan.JoinTypeInner:
 		return 1
-	case plan.JoinTypeSemi:
+	case plan.JoinTypeSemi, plan.JoinTypeRightSemi:
 		return 2
 	case plan.JoinTypeAnti:
 		return 3

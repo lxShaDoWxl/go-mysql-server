@@ -23,7 +23,6 @@ import (
 	"github.com/dolthub/go-mysql-server/memory"
 	"github.com/dolthub/go-mysql-server/sql"
 	"github.com/dolthub/go-mysql-server/sql/expression"
-	"github.com/dolthub/go-mysql-server/sql/memo"
 	"github.com/dolthub/go-mysql-server/sql/plan"
 	"github.com/dolthub/go-mysql-server/sql/transform"
 	"github.com/dolthub/go-mysql-server/sql/types"
@@ -69,27 +68,27 @@ func TestBiasedCoster(t *testing.T) {
 
 	tests := []struct {
 		name string
-		c    func() memo.Coster
+		c    func() Coster
 		exp  plan.JoinType
 	}{
 		{
 			name: "inner",
-			c:    memo.NewInnerBiasedCoster,
+			c:    NewInnerBiasedCoster,
 			exp:  plan.JoinTypeInner,
 		},
 		{
 			name: "lookup",
-			c:    memo.NewLookupBiasedCoster,
+			c:    NewLookupBiasedCoster,
 			exp:  plan.JoinTypeLookup,
 		},
 		{
 			name: "hash",
-			c:    memo.NewHashBiasedCoster,
+			c:    NewHashBiasedCoster,
 			exp:  plan.JoinTypeHash,
 		},
 		{
 			name: "merge",
-			c:    memo.NewMergeBiasedCoster,
+			c:    NewMergeBiasedCoster,
 			exp:  plan.JoinTypeMerge,
 		},
 	}

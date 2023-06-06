@@ -32,6 +32,7 @@ const (
 	JoinTypeInner                           // InnerJoin
 	JoinTypeSemi                            // SemiJoin
 	JoinTypeAnti                            // AntiJoin
+	JoinTypeRightSemi                       // RightSemiJoin
 	JoinTypeLeftOuter                       // LeftOuterJoin
 	JoinTypeFullOuter                       // FullOuterJoin
 	JoinTypeGroupBy                         // GroupByJoin
@@ -46,6 +47,7 @@ const (
 	JoinTypeAntiHash                        // AntiHashJoin
 	JoinTypeSemiLookup                      // SemiLookupJoin
 	JoinTypeAntiLookup                      // AntiLookupJoin
+	JoinTypeRightSemiLookup                 // RightSemiLookupJoin
 	JoinTypeSemiMerge                       // SemiMergeJoin
 	JoinTypeAntiMerge                       // AntiMergeJoin
 	JoinTypeNatural                         // NaturalJoin
@@ -71,7 +73,7 @@ func (i JoinType) IsFullOuter() bool {
 func (i JoinType) IsPhysical() bool {
 	switch i {
 	case JoinTypeLookup, JoinTypeLeftOuterLookup,
-		JoinTypeSemiLookup, JoinTypeSemiMerge, JoinTypeSemiHash,
+		JoinTypeSemiLookup, JoinTypeRightSemiLookup, JoinTypeSemiMerge, JoinTypeSemiHash,
 		JoinTypeHash, JoinTypeLeftOuterHash,
 		JoinTypeMerge, JoinTypeLeftOuterMerge,
 		JoinTypeAntiLookup, JoinTypeAntiMerge, JoinTypeAntiHash:
@@ -116,9 +118,19 @@ func (i JoinType) IsHash() bool {
 	}
 }
 
+func (i JoinType) IsRightPartial() bool {
+	switch i {
+	case JoinTypeRightSemi, JoinTypeRightSemiLookup:
+		return true
+	default:
+
+		return false
+	}
+}
+
 func (i JoinType) IsSemi() bool {
 	switch i {
-	case JoinTypeSemi, JoinTypeSemiLookup, JoinTypeSemiMerge, JoinTypeSemiHash:
+	case JoinTypeRightSemi, JoinTypeSemi, JoinTypeSemiLookup, JoinTypeSemiMerge, JoinTypeSemiHash, JoinTypeRightSemiLookup:
 		return true
 	default:
 
@@ -138,10 +150,12 @@ func (i JoinType) IsAnti() bool {
 func (i JoinType) IsPartial() bool {
 	return i == JoinTypeSemi ||
 		i == JoinTypeAnti ||
+		i == JoinTypeRightSemi ||
 		i == JoinTypeSemiHash ||
 		i == JoinTypeAntiHash ||
 		i == JoinTypeAntiLookup ||
-		i == JoinTypeSemiLookup
+		i == JoinTypeSemiLookup ||
+		i == JoinTypeRightSemiLookup
 }
 
 func (i JoinType) IsPlaceholder() bool {
@@ -202,6 +216,8 @@ func (i JoinType) AsLookup() JoinType {
 		return JoinTypeSemiLookup
 	case JoinTypeAnti:
 		return JoinTypeAntiLookup
+	case JoinTypeRightSemi:
+		return JoinTypeRightSemiLookup
 	default:
 		return i
 	}
@@ -295,6 +311,8 @@ func (j *JoinNode) Schema() sql.Schema {
 		return append(makeNullable(j.left.Schema()), j.right.Schema()...)
 	case j.Op.IsFullOuter():
 		return append(makeNullable(j.left.Schema()), makeNullable(j.right.Schema())...)
+	case j.Op.IsRightPartial():
+		return j.Right().Schema()
 	case j.Op.IsPartial():
 		return j.Left().Schema()
 	case j.Op.IsNatural():

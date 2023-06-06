@@ -9,22 +9,19 @@ import (
 
 func TestAggGen(t *testing.T) {
 	test := struct {
-		defines  AggDefs
+		defines  []AggDef
 		expected string
 	}{
-		defines: AggDefs{
-			[]AggDef{
-				{
-					Name:    "Test",
-					Desc:    "Test description",
-					RetType: "sql.Float64",
-				},
+		defines: []AggDef{
+			{
+				Name:    "Test",
+				Desc:    "Test description",
+				RetType: "sql.Float64",
 			},
 		},
 		expected: `
         import (
             "fmt"
-            "github.com/dolthub/go-mysql-server/sql/types"
             "github.com/dolthub/go-mysql-server/sql"
             "github.com/dolthub/go-mysql-server/sql/expression"
             "github.com/dolthub/go-mysql-server/sql/transform"

@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package plan
+package analyzer
 
 import (
 	"github.com/dolthub/go-mysql-server/sql"
+	"github.com/dolthub/go-mysql-server/sql/plan"
 	"github.com/dolthub/go-mysql-server/sql/transform"
 )
 
@@ -26,16 +27,16 @@ type Scope struct {
 	nodes []sql.Node
 	// Memo nodes are nodes in the execution context that shouldn't be considered for name resolution, but are still
 	// important for analysis.
-	Memos []sql.Node
+	memos []sql.Node
 	// recursionDepth tracks how many times we've recursed with analysis, to avoid stack overflows from infinite recursion
 	recursionDepth int
-	// CurrentNodeIsFromSubqueryExpression is true when the last scope (i.e. the most inner of the outer scope levels) has been
+	// currentNodeIsFromSubqueryExpression is true when the last scope (i.e. the most inner of the outer scope levels) has been
 	// created by a subquery expression. This is needed in order to calculate outer scope visibility for derived tables.
-	CurrentNodeIsFromSubqueryExpression bool
-	// EnforceReadOnly causes analysis to block all modification operations, as though a database is read only.
-	EnforceReadOnly bool
+	currentNodeIsFromSubqueryExpression bool
+	// enforceReadOnly causes analysis to block all modification operations, as though a database is read only.
+	enforceReadOnly bool
 
-	Procedures *ProcedureCache
+	procedures *ProcedureCache
 
 	inJoin       bool
 	joinSiblings []sql.Node
@@ -53,7 +54,7 @@ func (s *Scope) IsEmpty() bool {
 }
 
 func (s *Scope) EnforcesReadOnly() bool {
-	return s != nil && s.EnforceReadOnly
+	return s != nil && s.enforceReadOnly
 }
 
 // OuterRelUnresolved returns true if the relations in the
@@ -64,9 +65,9 @@ func (s *Scope) OuterRelUnresolved() bool {
 	return !s.IsEmpty() && s.Schema() == nil && len(s.nodes[0].Children()) > 0
 }
 
-// NewScope creates a new Scope object with the additional innermost Node context. When constructing with a subquery,
+// newScope creates a new Scope object with the additional innermost Node context. When constructing with a subquery,
 // the Node given should be the sibling Node of the subquery.
-func (s *Scope) NewScope(node sql.Node) *Scope {
+func (s *Scope) newScope(node sql.Node) *Scope {
 	if s == nil {
 		return &Scope{nodes: []sql.Node{node}}
 	}
@@ -75,28 +76,28 @@ func (s *Scope) NewScope(node sql.Node) *Scope {
 	newNodes = append(newNodes, s.nodes...)
 	return &Scope{
 		nodes:          newNodes,
-		Memos:          s.Memos,
+		memos:          s.memos,
 		recursionDepth: s.recursionDepth + 1,
-		Procedures:     s.Procedures,
+		procedures:     s.procedures,
 		joinSiblings:   s.joinSiblings,
 	}
 }
 
-// NewScopeFromSubqueryExpression returns a new subscope created from a subquery expression contained by the specified
+// newScopeFromSubqueryExpression returns a new subscope created from a subquery expression contained by the specified
 // node.
-func (s *Scope) NewScopeFromSubqueryExpression(node sql.Node) *Scope {
-	subScope := s.NewScope(node)
-	subScope.CurrentNodeIsFromSubqueryExpression = true
+func (s *Scope) newScopeFromSubqueryExpression(node sql.Node) *Scope {
+	subScope := s.newScope(node)
+	subScope.currentNodeIsFromSubqueryExpression = true
 	return subScope
 }
 
-// NewScopeFromSubqueryExpression returns a new subscope created from a subquery expression contained by the specified
+// newScopeFromSubqueryExpression returns a new subscope created from a subquery expression contained by the specified
 // node.
-func (s *Scope) NewScopeInJoin(node sql.Node) *Scope {
+func (s *Scope) newScopeInJoin(node sql.Node) *Scope {
 	for {
 		var done bool
 		switch n := node.(type) {
-		case *StripRowNode:
+		case *plan.StripRowNode:
 			node = n.Child
 		default:
 			done = true
@@ -107,9 +108,9 @@ func (s *Scope) NewScopeInJoin(node sql.Node) *Scope {
 	}
 	subScope := &Scope{
 		nodes:          s.nodes,
-		Memos:          s.Memos,
+		memos:          s.memos,
 		recursionDepth: s.recursionDepth + 1,
-		Procedures:     s.Procedures,
+		procedures:     s.procedures,
 		joinSiblings:   s.joinSiblings,
 	}
 	subScope.joinSiblings = append(subScope.joinSiblings, node)
@@ -118,20 +119,20 @@ func (s *Scope) NewScopeInJoin(node sql.Node) *Scope {
 
 // newScopeFromSubqueryExpression returns a new subscope created from a subquery expression contained by the specified
 // node.
-func (s *Scope) NewScopeNoJoin() *Scope {
+func (s *Scope) newScopeNoJoin() *Scope {
 	return &Scope{
 		nodes:           s.nodes,
-		Memos:           s.Memos,
+		memos:           s.memos,
 		recursionDepth:  s.recursionDepth + 1,
-		Procedures:      s.Procedures,
-		EnforceReadOnly: s.EnforceReadOnly,
+		procedures:      s.procedures,
+		enforceReadOnly: s.enforceReadOnly,
 	}
 }
 
-// NewScopeFromSubqueryAlias returns a new subscope created from the specified SubqueryAlias. Subquery aliases, or
+// newScopeFromSubqueryAlias returns a new subscope created from the specified SubqueryAlias. Subquery aliases, or
 // derived tables, generally do NOT have any visibility to outer scopes, but when they are nested inside a subquery
 // expression, they may reference tables from the scopes outside the subquery expression's scope.
-func (s *Scope) NewScopeFromSubqueryAlias(sqa *SubqueryAlias) *Scope {
+func (s *Scope) newScopeFromSubqueryAlias(sqa *plan.SubqueryAlias) *Scope {
 	subScope := newScopeWithDepth(s.RecursionDepth() + 1)
 	if s != nil && len(s.nodes) > 0 {
 		// As of MySQL 8.0.14, MySQL provides OUTER scope visibility to derived tables. Unlike LATERAL scope visibility, which
@@ -139,7 +140,7 @@ func (s *Scope) NewScopeFromSubqueryAlias(sqa *SubqueryAlias) *Scope {
 		// gives a derived table visibility to the OUTER scope where the subquery is defined.
 		// https://dev.mysql.com/blog-archive/supporting-all-kinds-of-outer-references-in-derived-tables-lateral-or-not/
 		// We don't include the current inner node so that the outer scope nodes are still present, but not the lateral nodes
-		if s.CurrentNodeIsFromSubqueryExpression {
+		if s.currentNodeIsFromSubqueryExpression {
 			sqa.OuterScopeVisibility = true
 			subScope.joinSiblings = append(subScope.joinSiblings, s.joinSiblings...)
 			subScope.nodes = append(subScope.nodes, s.InnerToOuter()...)
@@ -157,31 +158,31 @@ func newScopeWithDepth(depth int) *Scope {
 	return &Scope{recursionDepth: depth}
 }
 
-// Memo creates a new Scope object with the Memo node given. Memo nodes don't affect name resolution, but are used in
+// memo creates a new Scope object with the memo node given. Memo nodes don't affect name resolution, but are used in
 // other parts of analysis, such as error handling for trigger / procedure execution.
-func (s *Scope) Memo(node sql.Node) *Scope {
+func (s *Scope) memo(node sql.Node) *Scope {
 	if s == nil {
-		return &Scope{Memos: []sql.Node{node}}
+		return &Scope{memos: []sql.Node{node}}
 	}
 	var newNodes []sql.Node
 	newNodes = append(newNodes, node)
-	newNodes = append(newNodes, s.Memos...)
+	newNodes = append(newNodes, s.memos...)
 	return &Scope{
-		Memos:      newNodes,
+		memos:      newNodes,
 		nodes:      s.nodes,
-		Procedures: s.Procedures,
+		procedures: s.procedures,
 	}
 }
 
-// WithMemos returns a new scope object identical to the receiver, but with its memos replaced with the ones given.
-func (s *Scope) WithMemos(memoNodes []sql.Node) *Scope {
+// withMemos returns a new scope object identical to the receiver, but with its memos replaced with the ones given.
+func (s *Scope) withMemos(memoNodes []sql.Node) *Scope {
 	if s == nil {
-		return &Scope{Memos: memoNodes}
+		return &Scope{memos: memoNodes}
 	}
 	return &Scope{
-		Memos:      memoNodes,
+		memos:      memoNodes,
 		nodes:      s.nodes,
-		Procedures: s.Procedures,
+		procedures: s.procedures,
 	}
 }
 
@@ -189,7 +190,7 @@ func (s *Scope) MemoNodes() []sql.Node {
 	if s == nil {
 		return nil
 	}
-	return s.Memos
+	return s.memos
 }
 
 func (s *Scope) RecursionDepth() int {
@@ -199,26 +200,26 @@ func (s *Scope) RecursionDepth() int {
 	return s.recursionDepth
 }
 
-func (s *Scope) ProcedureCache() *ProcedureCache {
+func (s *Scope) procedureCache() *ProcedureCache {
 	if s == nil {
 		return nil
 	}
-	return s.Procedures
+	return s.procedures
 }
 
-func (s *Scope) WithProcedureCache(cache *ProcedureCache) *Scope {
+func (s *Scope) withProcedureCache(cache *ProcedureCache) *Scope {
 	if s == nil {
-		return &Scope{Procedures: cache}
+		return &Scope{procedures: cache}
 	}
 	return &Scope{
-		Memos:      s.Memos,
+		memos:      s.memos,
 		nodes:      s.nodes,
-		Procedures: cache,
+		procedures: cache,
 	}
 }
 
-func (s *Scope) ProceduresPopulating() bool {
-	return s != nil && s.Procedures != nil && s.Procedures.IsPopulating
+func (s *Scope) proceduresPopulating() bool {
+	return s != nil && s.procedures != nil && s.procedures.IsPopulating
 }
 
 // InnerToOuter returns the scope Nodes in order of innermost scope to outermost scope. When using these nodes for
@@ -260,7 +261,7 @@ func (s *Scope) Schema() sql.Schema {
 			// If this scope node isn't resolved, we can't use Schema() on it. Instead, assemble an equivalent Schema, with
 			// placeholder columns where necessary, for the purpose of analysis.
 			switch n := n.(type) {
-			case *Project:
+			case *plan.Project:
 				for _, expr := range n.Projections {
 					var col *sql.Column
 					if expr.Resolved() {

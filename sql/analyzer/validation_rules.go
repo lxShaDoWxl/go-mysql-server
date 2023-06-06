@@ -16,7 +16,6 @@ package analyzer
 
 import (
 	"fmt"
-	"github.com/dolthub/go-mysql-server/sql/fixidx"
 	"reflect"
 	"strings"
 
@@ -31,7 +30,7 @@ import (
 )
 
 // validateLimitAndOffset ensures that only integer literals are used for limit and offset values
-func validateLimitAndOffset(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func validateLimitAndOffset(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	var err error
 	var i, i64 interface{}
 	transform.Inspect(n, func(n sql.Node) bool {
@@ -96,7 +95,7 @@ func validateLimitAndOffset(ctx *sql.Context, a *Analyzer, n sql.Node, scope *pl
 	return n, transform.SameTree, err
 }
 
-func validateIsResolved(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func validateIsResolved(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	span, ctx := ctx.Span("validate_is_resolved")
 	defer span.End()
 
@@ -136,7 +135,7 @@ func unresolvedError(n sql.Node) error {
 	return analyzererrors.ErrValidationResolved.New(n)
 }
 
-func validateOrderBy(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func validateOrderBy(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	span, ctx := ctx.Span("validate_order_by")
 	defer span.End()
 
@@ -156,7 +155,7 @@ func validateOrderBy(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scop
 // validateDeleteFrom checks for invalid settings, such as deleting from multiple databases, specifying a delete target
 // table multiple times, or using a DELETE FROM JOIN without specifying any explicit delete target tables, and returns
 // an error if any validation issues were detected.
-func validateDeleteFrom(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func validateDeleteFrom(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	span, ctx := ctx.Span("validate_order_by")
 	defer span.End()
 
@@ -257,7 +256,7 @@ func checkSqlMode(ctx *sql.Context, option string) (bool, error) {
 	return strings.Contains(val, option), nil
 }
 
-func validateGroupBy(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func validateGroupBy(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	span, ctx := ctx.Span("validate_group_by")
 	defer span.End()
 
@@ -343,7 +342,7 @@ func expressionReferencesOnlyGroupBys(groupBys []string, expr sql.Expression) bo
 	return valid
 }
 
-func validateSchemaSource(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func validateSchemaSource(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	span, ctx := ctx.Span("validate_schema_source")
 	defer span.End()
 
@@ -359,7 +358,7 @@ func validateSchemaSource(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan
 	return n, transform.SameTree, nil
 }
 
-func validateIndexCreation(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func validateIndexCreation(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	span, ctx := ctx.Span("validate_index_creation")
 	defer span.End()
 
@@ -400,7 +399,7 @@ func validateSchema(t *plan.ResolvedTable) error {
 	return nil
 }
 
-func validateUnionSchemasMatch(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func validateUnionSchemasMatch(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	span, ctx := ctx.Span("validate_union_schemas_match")
 	defer span.End()
 
@@ -434,7 +433,7 @@ func validateUnionSchemasMatch(ctx *sql.Context, a *Analyzer, n sql.Node, scope 
 	return n, transform.SameTree, nil
 }
 
-func validateIntervalUsage(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func validateIntervalUsage(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	var invalid bool
 	transform.InspectExpressionsWithNode(n, func(node sql.Node, e sql.Expression) bool {
 		// If it's already invalid just skip everything else.
@@ -469,7 +468,7 @@ func validateIntervalUsage(ctx *sql.Context, a *Analyzer, n sql.Node, scope *pla
 	return n, transform.SameTree, nil
 }
 
-func validateStarExpressions(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func validateStarExpressions(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	// Validate that all occurences of the '*' placeholder expression are in a context that makes sense.
 	//
 	// That is, all uses of '*' should be either:
@@ -513,7 +512,7 @@ func validateStarExpressions(ctx *sql.Context, a *Analyzer, n sql.Node, scope *p
 	return n, transform.SameTree, nil
 }
 
-func validateOperands(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func validateOperands(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	// Validate that the number of columns in an operand or a top level
 	// expression are as expected. The current rules are:
 	// * Every top level expression of a node must have 1 column.
@@ -601,7 +600,7 @@ func validateOperands(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Sco
 	return n, transform.SameTree, nil
 }
 
-func validateSubqueryColumns(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func validateSubqueryColumns(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	// Then validate that every subquery has field indexes within the correct range
 	// TODO: Why is this only for subqueries?
 
@@ -618,7 +617,7 @@ func validateSubqueryColumns(ctx *sql.Context, a *Analyzer, n sql.Node, scope *p
 			return true
 		}
 
-		outerScopeRowLen := len(scope.Schema()) + len(fixidx.Schemas(n.Children()))
+		outerScopeRowLen := len(scope.Schema()) + len(schemas(n.Children()))
 		transform.Inspect(s.Query, func(n sql.Node) bool {
 			if n == nil {
 				return true
@@ -633,7 +632,7 @@ func validateSubqueryColumns(ctx *sql.Context, a *Analyzer, n sql.Node, scope *p
 			default:
 			}
 			if es, ok := n.(sql.Expressioner); ok {
-				childSchemaLen := len(fixidx.Schemas(n.Children()))
+				childSchemaLen := len(schemas(n.Children()))
 				for _, e := range es.Expressions() {
 					sql.Inspect(e, func(e sql.Expression) bool {
 						if gf, ok := e.(*expression.GetField); ok {
@@ -676,7 +675,7 @@ func tableColsContains(strs []tableCol, target tableCol) bool {
 }
 
 // validateReadOnlyDatabase invalidates queries that attempt to write to ReadOnlyDatabases.
-func validateReadOnlyDatabase(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func validateReadOnlyDatabase(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	valid := true
 	var readOnlyDB sql.ReadOnlyDatabase
 	enforceReadOnly := scope.EnforcesReadOnly()
@@ -746,7 +745,7 @@ func validateReadOnlyDatabase(ctx *sql.Context, a *Analyzer, n sql.Node, scope *
 }
 
 // validateReadOnlyTransaction invalidates read only transactions that try to perform improper write operations.
-func validateReadOnlyTransaction(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func validateReadOnlyTransaction(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	t := ctx.GetTransaction()
 
 	if t == nil {
@@ -823,7 +822,7 @@ func validateReadOnlyTransaction(ctx *sql.Context, a *Analyzer, n sql.Node, scop
 // See https://github.com/dolthub/go-mysql-server/issues/542 for some queries
 // that should be supported but that currently trigger this validation because
 // aggregation expressions end up in the wrong place.
-func validateAggregations(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func validateAggregations(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	var validationErr error
 	transform.Inspect(n, func(n sql.Node) bool {
 		switch n := n.(type) {
@@ -912,7 +911,7 @@ func findFirstWindowAggregationColumnReference(w *plan.Window) (index int, gf *e
 	return -1, nil
 }
 
-func validateExprSem(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func validateExprSem(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	var err error
 	transform.InspectExpressions(n, func(e sql.Expression) bool {
 		err = validateSem(e)

@@ -1,7 +1,7 @@
 package analyzer
 
 import (
-	"github.com/dolthub/go-mysql-server/sql/fixidx"
+	"fmt"
 	"strings"
 
 	"github.com/dolthub/go-mysql-server/sql"
@@ -16,7 +16,7 @@ import (
 // select * from xy where exists (select * from uv where x = 1)
 // =>
 // select * from xy where x = 1 and exists (select * from uv)
-func hoistOutOfScopeFilters(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
+func hoistOutOfScopeFilters(ctx *sql.Context, a *Analyzer, n sql.Node, scope *Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	switch n.(type) {
 	case *plan.TriggerBeginEndBlock:
 		return n, transform.SameTree, nil
@@ -24,9 +24,7 @@ func hoistOutOfScopeFilters(ctx *sql.Context, a *Analyzer, n sql.Node, scope *pl
 	}
 	ret, same, filters, err := recurseSubqueryForOuterFilters(n, a, scope)
 	if len(filters) != 0 {
-		// todo empty table fold filters before here
-		return n, transform.SameTree, nil
-		//return n, transform.SameTree, fmt.Errorf("rule 'hoistOutOfScopeFilters' tried to hoist filters above root node")
+		return n, transform.SameTree, fmt.Errorf("rule 'hoistOutOfScopeFilters' tried to hoist filters above root node")
 	}
 	return ret, same, err
 }
@@ -36,14 +34,14 @@ func hoistOutOfScopeFilters(ctx *sql.Context, a *Analyzer, n sql.Node, scope *pl
 // subquery filters. We do a BFS to extract hoistable filters from subquery
 // expressions before checking the normalized subquery and its hoisted
 // filters for further hoisting.
-func recurseSubqueryForOuterFilters(n sql.Node, a *Analyzer, scope *plan.Scope) (sql.Node, transform.TreeIdentity, []sql.Expression, error) {
+func recurseSubqueryForOuterFilters(n sql.Node, a *Analyzer, scope *Scope) (sql.Node, transform.TreeIdentity, []sql.Expression, error) {
 	var hoistFilters []sql.Expression
 	lowestAllowedIdx := len(scope.Schema())
 	var inScope TableAliases
 	ret, same, err := transform.Node(n, func(n sql.Node) (sql.Node, transform.TreeIdentity, error) {
 		sq, _ := n.(*plan.SubqueryAlias)
 		if sq != nil {
-			subScope := scope.NewScope(sq)
+			subScope := scope.newScopeFromSubqueryAlias(sq)
 			newQ, same, hoisted, err := recurseSubqueryForOuterFilters(sq.Child, a, subScope)
 			if err != nil {
 				return n, transform.SameTree, err
@@ -63,7 +61,7 @@ func recurseSubqueryForOuterFilters(n sql.Node, a *Analyzer, scope *plan.Scope) 
 
 		var keepFilters []sql.Expression
 		allSame := transform.SameTree
-		queue := expression.SplitConjunction(f.Expression)
+		queue := splitConjunction(f.Expression)
 		for len(queue) > 0 {
 			e := queue[0]
 			queue = queue[1:]
@@ -88,7 +86,7 @@ func recurseSubqueryForOuterFilters(n sql.Node, a *Analyzer, scope *plan.Scope) 
 			}
 			if sq != nil {
 				children := e.Children()
-				subScope := scope.NewScopeFromSubqueryExpression(n)
+				subScope := scope.newScopeFromSubqueryExpression(n)
 				newQ, same, hoisted, err := recurseSubqueryForOuterFilters(sq.Query, a, subScope)
 				if err != nil {
 					return n, transform.SameTree, err
@@ -99,7 +97,7 @@ func recurseSubqueryForOuterFilters(n sql.Node, a *Analyzer, scope *plan.Scope) 
 				e, _ = e.WithChildren(children...)
 
 				if len(hoisted) > 0 {
-					newScopeFilters, _, err := fixidx.FixFieldIndexesOnExpressions(scope, a.LogFn(), n.Schema(), hoisted...)
+					newScopeFilters, _, err := FixFieldIndexesOnExpressions(scope, a, n.Schema(), hoisted...)
 					if err != nil {
 						return n, transform.SameTree, err
 					}
