@@ -236,17 +236,24 @@ func TestSingleQueryPrepared(t *testing.T) {
 
 // Convenience test for debugging a single query. Unskip and set to the desired query.
 func TestSingleScript(t *testing.T) {
-	t.Skip()
+	//t.Skip()
 	var scripts = []queries.ScriptTest{
 		{
 			Name: "trigger with signal and user var",
 			SetUpScript: []string{
-				"create table auctions (ai int auto_increment, id varchar(32), data json, primary key (ai));",
+				"create table parent (id int primary key);",
 			},
 			Assertions: []queries.ScriptTestAssertion{
 				{
-					Query:    `select data from auctions order by ai desc limit 1;`,
-					Expected: []sql.Row{},
+					Query:    `CREATE TABLE t (pk int primary key, fk int REFERENCES parent(id))`,
+					Expected: []sql.Row{{types.NewOkResult(0)}},
+				},
+				{
+					// TODO: Selecting from INFORMATION_SCHEMA to show the FK instead?
+					// TODO: Test more deeply to make sure this really works?
+					Query: `SHOW CREATE TABLE t;`,
+					Expected: []sql.Row{{"t",
+						"CREATE TABLE `t` (\n  `pk` int NOT NULL,\n  `fk` int,\n  PRIMARY KEY (`pk`),\n  KEY `fk` (`fk`),\n  CONSTRAINT `` FOREIGN KEY (`fk`) REFERENCES `parent` (`id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin"}},
 				},
 			},
 		},

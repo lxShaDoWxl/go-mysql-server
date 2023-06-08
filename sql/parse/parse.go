@@ -2478,6 +2478,7 @@ func convertCreateTable(ctx *sql.Context, c *sqlparser.DDL) (sql.Node, error) {
 }
 
 func ConvertConstraintsDefs(ctx *sql.Context, tname sqlparser.TableName, spec *sqlparser.TableSpec) (fks []*sql.ForeignKeyConstraint, checks []*sql.CheckConstraint, err error) {
+	// Pull out all the foreign keys declared as constraints in the table spec
 	for _, unknownConstraint := range spec.Constraints {
 		parsedConstraint, err := convertConstraintDefinition(ctx, unknownConstraint)
 		if err != nil {
@@ -2497,6 +2498,36 @@ func ConvertConstraintsDefs(ctx *sql.Context, tname sqlparser.TableName, spec *s
 			return nil, nil, sql.ErrUnknownConstraintDefinition.New(unknownConstraint.Name, unknownConstraint)
 		}
 	}
+
+	// Pull out all the foreign keys declared inline in a column definition
+	for _, columnDef := range spec.Columns {
+		columnType := columnDef.Type
+		if columnType.ForeignKeyOpt != nil {
+			// Set the Source, since the yacc parser doesn't have context to set it when the
+			// FK is defined inside the column definition
+			columnType.ForeignKeyOpt.Source = []sqlparser.ColIdent{columnDef.Name}
+			constraintDef := sqlparser.ConstraintDefinition{
+				Details: columnType.ForeignKeyOpt,
+			}
+
+			constraint, err := convertConstraintDefinition(ctx, &constraintDef)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			if foreignKeyConstraint, ok := constraint.(*sql.ForeignKeyConstraint); ok {
+				foreignKeyConstraint.Database = tname.Qualifier.String()
+				foreignKeyConstraint.Table = tname.Name.String()
+				if foreignKeyConstraint.Database == "" {
+					foreignKeyConstraint.Database = ctx.GetCurrentDatabase()
+				}
+				fks = append(fks, foreignKeyConstraint)
+			} else {
+				return nil, nil, fmt.Errorf("unexpected constraint type: %T", constraint)
+			}
+		}
+	}
+
 	return
 }
 
