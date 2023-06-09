@@ -2502,12 +2502,12 @@ func ConvertConstraintsDefs(ctx *sql.Context, tname sqlparser.TableName, spec *s
 	// Pull out all the foreign keys declared inline in a column definition
 	for _, columnDef := range spec.Columns {
 		columnType := columnDef.Type
-		if columnType.ForeignKeyOpt != nil {
+		if columnType.ForeignKeyDef != nil {
 			// Set the Source, since the yacc parser doesn't have context to set it when the
 			// FK is defined inside the column definition
-			columnType.ForeignKeyOpt.Source = []sqlparser.ColIdent{columnDef.Name}
+			columnType.ForeignKeyDef.Source = []sqlparser.ColIdent{columnDef.Name}
 			constraintDef := sqlparser.ConstraintDefinition{
-				Details: columnType.ForeignKeyOpt,
+				Details: columnType.ForeignKeyDef,
 			}
 
 			constraint, err := convertConstraintDefinition(ctx, &constraintDef)
