@@ -36,6 +36,37 @@ var ForeignKeyTests = []ScriptTest{
 			},
 		},
 	},
+
+	// TODO: Position?
+	{
+		// TODO: This still doesn't work with "ON DELETE" and "ON UPDATE"
+		Name: "CREATE TABLE with inline foreign key reference def",
+		SetUpScript: []string{
+			"CREATE TABLE t (pk int primary key, fk int REFERENCES parent(id))",
+		},
+		Assertions: []ScriptTestAssertion{
+			{
+				Query: `SHOW CREATE TABLE t;`,
+				Expected: []sql.Row{{"t",
+					"CREATE TABLE `t` (\n  `pk` int NOT NULL,\n  `fk` int,\n  PRIMARY KEY (`pk`),\n  KEY `fk` (`fk`),\n  CONSTRAINT `` FOREIGN KEY (`fk`) REFERENCES `parent` (`id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin"}},
+			},
+		},
+	},
+	{
+		// TODO: This still doesn't work with "ON DELETE" and "ON UPDATE"
+		Name: "ALTER TABLE with inline foreign key reference def",
+		SetUpScript: []string{
+			"CREATE TABLE t (pk int primary key);",
+			"ALTER TABLE t ADD COLUMN fk int REFERENCES parent(id);",
+		},
+		Assertions: []ScriptTestAssertion{
+			{
+				Query: `SHOW CREATE TABLE t;`,
+				Expected: []sql.Row{{"t",
+					"CREATE TABLE `t` (\n  `pk` int NOT NULL,\n  `fk` int,\n  PRIMARY KEY (`pk`),\n  KEY `fk` (`fk`),\n  CONSTRAINT `` FOREIGN KEY (`fk`) REFERENCES `parent` (`id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin"}},
+			},
+		},
+	},
 	{
 		Name: "CREATE TABLE Single Named FOREIGN KEY",
 		SetUpScript: []string{

@@ -2105,7 +2105,27 @@ func newColumnAction(ctx *sql.Context, ddl *sqlparser.DDL) (sql.Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		return plan.NewAddColumn(sql.UnresolvedDatabase(ddl.Table.Qualifier.String()), tableNameToUnresolvedTable(ddl.Table), sch.Schema[0], columnOrderToColumnOrder(ddl.ColumnOrder)), nil
+
+		addColumnNode := plan.NewAddColumn(sql.UnresolvedDatabase(ddl.Table.Qualifier.String()), tableNameToUnresolvedTable(ddl.Table), sch.Schema[0], columnOrderToColumnOrder(ddl.ColumnOrder))
+
+		// When adding a new column, the column definition may
+		// also define a foreign key reference. If it does, extract
+		// the FK definition and return a block node that contains
+		// the add column node and the add FK node.
+		fkDefs, err := extractInlineForeignKeyDefinitions(ctx, ddl)
+		if err != nil {
+			return nil, err
+		}
+		if len(fkDefs) > 0 {
+			nodes := []sql.Node{addColumnNode}
+			for _, fkDef := range fkDefs {
+				nodes = append(nodes, plan.NewAlterAddForeignKey(fkDef))
+			}
+			block := plan.NewBlock(nodes)
+			return block, nil
+		}
+
+		return addColumnNode, nil
 	case sqlparser.DropStr:
 		return plan.NewDropColumn(sql.UnresolvedDatabase(ddl.Table.Qualifier.String()), tableNameToUnresolvedTable(ddl.Table), ddl.Column.String()), nil
 	case sqlparser.RenameStr:
@@ -2118,6 +2138,44 @@ func newColumnAction(ctx *sql.Context, ddl *sqlparser.DDL) (sql.Node, error) {
 		return plan.NewModifyColumn(sql.UnresolvedDatabase(ddl.Table.Qualifier.String()), tableNameToUnresolvedTable(ddl.Table), ddl.Column.String(), sch.Schema[0], columnOrderToColumnOrder(ddl.ColumnOrder)), nil
 	}
 	return nil, sql.ErrUnsupportedFeature.New(sqlparser.String(ddl))
+}
+
+// TODO: Position?
+func extractInlineForeignKeyDefinitions(ctx *sql.Context, ddl *sqlparser.DDL) ([]*sql.ForeignKeyConstraint, error) {
+	// Extract any FKs that are inline in the column definition
+	fks := []*sql.ForeignKeyConstraint{}
+	if ddl.TableSpec != nil {
+		// TODO: There should be only one column added at a time
+		for _, columnDef := range ddl.TableSpec.Columns {
+			columnType := columnDef.Type
+			if columnType.ForeignKeyDef != nil {
+				// Set the Source, since the yacc parser doesn't have context to set it when the
+				// FK is defined inside the column definition
+				columnType.ForeignKeyDef.Source = []sqlparser.ColIdent{columnDef.Name}
+				constraintDef := sqlparser.ConstraintDefinition{
+					Details: columnType.ForeignKeyDef,
+				}
+
+				constraint, err := convertConstraintDefinition(ctx, &constraintDef)
+				if err != nil {
+					return nil, err
+				}
+
+				if foreignKeyConstraint, ok := constraint.(*sql.ForeignKeyConstraint); ok {
+					foreignKeyConstraint.Database = ddl.Table.Qualifier.String()
+					foreignKeyConstraint.Table = ddl.Table.Name.String()
+					if foreignKeyConstraint.Database == "" {
+						foreignKeyConstraint.Database = ctx.GetCurrentDatabase()
+					}
+					fks = append(fks, foreignKeyConstraint)
+				} else {
+					return nil, fmt.Errorf("unexpected constraint type: %T", constraint)
+				}
+			}
+		}
+	}
+
+	return fks, nil
 }
 
 func convertAlterTable(ctx *sql.Context, ddl *sqlparser.DDL) (sql.Node, error) {
