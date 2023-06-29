@@ -68,6 +68,8 @@ func NewListener(protocol, address string, unixSocketPath string) (*Listener, er
 		//      https://github.com/dolthub/dolt/actions/runs/5406531989/jobs/9823511686?pr=6245#step:18:2216
 		//      https://github.com/dolthub/dolt/actions/runs/5415399938/jobs/9843656413?pr=6258#step:18:2245
 		if err != nil {
+			originalErr := err
+
 			if strings.Contains(strings.ToLower(err.Error()), "address already in use") {
 				split := strings.Split(address, ":")
 				if len(split) == 2 {
@@ -91,6 +93,11 @@ func NewListener(protocol, address string, unixSocketPath string) (*Listener, er
 				logrus.StandardLogger().Warnf("Pausing 5s to retry port...")
 				time.Sleep(5 * time.Second)
 				netl, err = newNetListener(protocol, address)
+				if err == nil {
+					logrus.StandardLogger().Warnf("IT WORKED! Opened port after 5s retry")
+					logrus.StandardLogger().Warnf("(returning original port error, so that these logs show up in BATS output though...)")
+					err = originalErr
+				}
 			}
 		}
 
