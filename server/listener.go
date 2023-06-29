@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -65,6 +66,7 @@ func NewListener(protocol, address string, unixSocketPath string) (*Listener, er
 		//      https://github.com/dolthub/dolt/actions/runs/5395439523/jobs/9797921148#step:18:2249
 		//      https://github.com/dolthub/dolt/actions/runs/5404900318/jobs/9819723916?pr=6245#step:18:2216
 		//      https://github.com/dolthub/dolt/actions/runs/5406531989/jobs/9823511686?pr=6245#step:18:2216
+		//      https://github.com/dolthub/dolt/actions/runs/5415399938/jobs/9843656413?pr=6258#step:18:2245
 		if err != nil {
 			if strings.Contains(strings.ToLower(err.Error()), "address already in use") {
 				split := strings.Split(address, ":")
@@ -85,10 +87,17 @@ func NewListener(protocol, address string, unixSocketPath string) (*Listener, er
 				} else {
 					logrus.StandardLogger().Warnf("Unable to parse address into `host:port`: %s", address)
 				}
+
+				logrus.StandardLogger().Warnf("Pausing 5s to retry port...")
+				time.Sleep(5 * time.Second)
+				netl, err = newNetListener(protocol, address)
 			}
 		}
 
-		return nil, err
+		if err != nil {
+			logrus.StandardLogger().Warnf("Unable to open listener: %s", err.Error())
+			return nil, err
+		}
 	}
 
 	var unixl net.Listener
