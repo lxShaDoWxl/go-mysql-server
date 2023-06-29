@@ -18,10 +18,14 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os/exec"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
+	"time"
 
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -55,7 +59,44 @@ type Listener struct {
 func NewListener(protocol, address string, unixSocketPath string) (*Listener, error) {
 	netl, err := newNetListener(protocol, address)
 	if err != nil {
-		return nil, err
+		// TODO: We're still seeing errors about address already in use, e.g:
+		//       https://github.com/dolthub/dolt/actions/runs/5395898150/jobs/9798898619?pr=6245#step:18:2240
+		// More examples:
+		//      https://github.com/dolthub/dolt/actions/runs/5395439523/jobs/9797921148#step:18:2249
+		//      https://github.com/dolthub/dolt/actions/runs/5404900318/jobs/9819723916?pr=6245#step:18:2216
+		//      https://github.com/dolthub/dolt/actions/runs/5406531989/jobs/9823511686?pr=6245#step:18:2216
+		//      https://github.com/dolthub/dolt/actions/runs/5415399938/jobs/9843656413?pr=6258#step:18:2245
+		if err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "address already in use") {
+				split := strings.Split(address, ":")
+				if len(split) == 2 {
+					port := split[1]
+					// if we're on unix, we should attempt to run lsof to see what is using the port and how
+					// and output that information in the error to the user:
+					//    lsof -i:<port>
+					if runtime.GOOS != "windows" {
+						cmd := exec.Command("lsof", fmt.Sprintf("-i:%s", port))
+						output, err := cmd.CombinedOutput()
+						if err != nil {
+							logrus.StandardLogger().Warnf("Unable to run lsof to detect what is using port %s: %s", port, err.Error())
+						} else {
+							logrus.StandardLogger().Warnf("lsof output: %s", string(output))
+						}
+					}
+				} else {
+					logrus.StandardLogger().Warnf("Unable to parse address into `host:port`: %s", address)
+				}
+
+				logrus.StandardLogger().Warnf("Pausing 5s to retry port...")
+				time.Sleep(5 * time.Second)
+				netl, err = newNetListener(protocol, address)
+			}
+		}
+
+		if err != nil {
+			logrus.StandardLogger().Warnf("Unable to open listener: %s", err.Error())
+			return nil, err
+		}
 	}
 
 	var unixl net.Listener
