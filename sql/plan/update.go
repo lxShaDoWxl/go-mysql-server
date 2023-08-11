@@ -96,7 +96,7 @@ func getDatabase(node sql.Node) sql.Database {
 	case *IndexedTableAccess:
 		return getDatabase(node.ResolvedTable)
 	case *ResolvedTable:
-		return node.Database
+		return node.SqlDatabase
 	case *UnresolvedTable:
 		return node.Database()
 	}
@@ -108,7 +108,7 @@ func getDatabase(node sql.Node) sql.Database {
 	return nil
 }
 
-// DB returns the database being updated. |Database| is already used by another interface we implement.
+// DB returns the database being updated. |SqlDatabase| is already used by another interface we implement.
 func (u *Update) DB() sql.Database {
 	return getDatabase(u.Child)
 }

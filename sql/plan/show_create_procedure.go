@@ -38,7 +38,7 @@ var showCreateProcedureSchema = sql.Schema{
 	&sql.Column{Name: "Create Procedure", Type: types.LongText, Nullable: false},
 	&sql.Column{Name: "character_set_client", Type: types.LongText, Nullable: false},
 	&sql.Column{Name: "collation_connection", Type: types.LongText, Nullable: false},
-	&sql.Column{Name: "Database Collation", Type: types.LongText, Nullable: false},
+	&sql.Column{Name: "SqlDatabase Collation", Type: types.LongText, Nullable: false},
 }
 
 // NewShowCreateProcedure creates a new ShowCreateProcedure node for SHOW CREATE PROCEDURE statements.
@@ -94,7 +94,7 @@ func (s *ShowCreateProcedure) RowIter(ctx *sql.Context, _ sql.Row) (sql.RowIter,
 			fakeCreateProcedureStmt,        // Create Procedure
 			characterSetClient,             // character_set_client
 			collationConnection,            // collation_connection
-			collationServer,                // Database Collation
+			collationServer,                // SqlDatabase Collation
 		}), nil
 	} else {
 		// Otherwise, search the StoredProcedureDatabase for a user-created stored procedure
@@ -114,7 +114,7 @@ func (s *ShowCreateProcedure) RowIter(ctx *sql.Context, _ sql.Row) (sql.RowIter,
 					procedure.CreateStatement, // Create Procedure
 					characterSetClient,        // character_set_client
 					collationConnection,       // collation_connection
-					collationServer,           // Database Collation
+					collationServer,           // SqlDatabase Collation
 				}), nil
 			}
 		}

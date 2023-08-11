@@ -2169,7 +2169,7 @@ func NewUpdatableInformationSchemaDatabase() Database {
 	return db
 }
 
-// NewInformationSchemaDatabase creates a new INFORMATION_SCHEMA Database.
+// NewInformationSchemaDatabase creates a new INFORMATION_SCHEMA SqlDatabase.
 func NewInformationSchemaDatabase() Database {
 	isDb := &informationSchemaDatabase{
 		name: InformationSchemaDatabaseName,
@@ -2572,7 +2572,7 @@ func NewInformationSchemaDatabase() Database {
 	return isDb
 }
 
-// Name implements the sql.Database interface.
+// Name implements the sql.SqlDatabase interface.
 func (db *informationSchemaDatabase) Name() string { return db.name }
 
 func (db *informationSchemaDatabase) GetTableInsensitive(ctx *Context, tblName string) (Table, bool, error) {
@@ -2916,7 +2916,7 @@ func getGlobalPrivsRowsFromPrivSet(privSet PrivilegeSet, grantee string) []Row {
 	return rows
 }
 
-// getSchemaPrivsRowsFromPrivDbSet returns SCHEMA_PRIVILEGES rows using given Database privilege set and grantee string.
+// getSchemaPrivsRowsFromPrivDbSet returns SCHEMA_PRIVILEGES rows using given SqlDatabase privilege set and grantee string.
 func getSchemaPrivsRowsFromPrivDbSet(privSetDb PrivilegeSetDatabase, grantee string) []Row {
 	var rows []Row
 	hasGrantOpt := privSetDb.Has(PrivilegeType_GrantOption)

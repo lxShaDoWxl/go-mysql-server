@@ -38,12 +38,12 @@ var _ sql.StoredProcedureDatabase = Database{}
 var _ sql.ViewDatabase = Database{}
 var _ sql.EventDatabase = Database{}
 
-// Name implements the interface sql.Database.
+// Name implements the interface sql.SqlDatabase.
 func (d Database) Name() string {
 	return d.name
 }
 
-// GetTableInsensitive implements the interface sql.Database.
+// GetTableInsensitive implements the interface sql.SqlDatabase.
 func (d Database) GetTableInsensitive(ctx *sql.Context, tblName string) (sql.Table, bool, error) {
 	tables, err := d.GetTableNames(ctx)
 	if err != nil {
@@ -58,7 +58,7 @@ func (d Database) GetTableInsensitive(ctx *sql.Context, tblName string) (sql.Tab
 	return nil, false, nil
 }
 
-// GetTableNames implements the interface sql.Database.
+// GetTableNames implements the interface sql.SqlDatabase.
 func (d Database) GetTableNames(ctx *sql.Context) ([]string, error) {
 	rows, err := d.shim.Query(d.name, "SHOW TABLES;")
 	if err != nil {

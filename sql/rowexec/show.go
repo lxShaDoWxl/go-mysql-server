@@ -271,7 +271,7 @@ func (b *BaseBuilder) buildShowCreateProcedure(ctx *sql.Context, n *plan.ShowCre
 			fakeCreateProcedureStmt,        // Create Procedure
 			characterSetClient,             // character_set_client
 			collationConnection,            // collation_connection
-			collationServer,                // Database Collation
+			collationServer,                // SqlDatabase Collation
 		}), nil
 	} else {
 		// Otherwise, search the StoredProcedureDatabase for a user-created stored procedure
@@ -291,7 +291,7 @@ func (b *BaseBuilder) buildShowCreateProcedure(ctx *sql.Context, n *plan.ShowCre
 					procedure.CreateStatement, // Create Procedure
 					characterSetClient,        // character_set_client
 					collationConnection,       // collation_connection
-					collationServer,           // Database Collation
+					collationServer,           // SqlDatabase Collation
 				}), nil
 			}
 		}
@@ -423,7 +423,7 @@ func (b *BaseBuilder) buildShowCreateTrigger(ctx *sql.Context, n *plan.ShowCreat
 				trigger.CreateStatement, // SQL Original Statement
 				characterSetClient,      // character_set_client
 				collationConnection,     // collation_connection
-				collationServer,         // Database Collation
+				collationServer,         // SqlDatabase Collation
 				trigger.CreatedAt,       // Created
 			}), nil
 		}
@@ -577,7 +577,7 @@ func (b *BaseBuilder) buildShowTriggers(ctx *sql.Context, n *plan.ShowTriggers, 
 			"",                  // Definer
 			characterSetClient,  // character_set_client
 			collationConnection, // collation_connection
-			collationServer,     // Database Collation
+			collationServer,     // SqlDatabase Collation
 		})
 	}
 	return sql.RowsToRowIter(rows...), nil

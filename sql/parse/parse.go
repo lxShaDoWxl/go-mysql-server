@@ -704,7 +704,7 @@ func convertShow(ctx *sql.Context, s *sqlparser.Show, query string) (sql.Node, e
 		node, err := Parse(ctx, "select routine_schema as `Db`, routine_name as `Name`, routine_type as `Type`,"+
 			"definer as `Definer`, last_altered as `Modified`, created as `Created`, security_type as `Security_type`,"+
 			"routine_comment as `Comment`, CHARACTER_SET_CLIENT as `character_set_client`, COLLATION_CONNECTION as `collation_connection`,"+
-			"database_collation as `Database Collation` from information_schema.routines where routine_type = 'PROCEDURE'")
+			"database_collation as `SqlDatabase Collation` from information_schema.routines where routine_type = 'PROCEDURE'")
 		if err != nil {
 			return nil, err
 		}
@@ -751,7 +751,7 @@ func convertShow(ctx *sql.Context, s *sqlparser.Show, query string) (sql.Node, e
 		node, err := Parse(ctx, "select routine_schema as `Db`, routine_name as `Name`, routine_type as `Type`,"+
 			"definer as `Definer`, last_altered as `Modified`, created as `Created`, security_type as `Security_type`,"+
 			"routine_comment as `Comment`, character_set_client, collation_connection,"+
-			"database_collation as `Database Collation` from information_schema.routines where routine_type = 'FUNCTION'")
+			"database_collation as `SqlDatabase Collation` from information_schema.routines where routine_type = 'FUNCTION'")
 		if err != nil {
 			return nil, err
 		}
@@ -863,7 +863,7 @@ func convertShow(ctx *sql.Context, s *sqlparser.Show, query string) (sql.Node, e
 				}
 			} else if s.Filter.Like != "" {
 				filter = expression.NewLike(
-					expression.NewUnresolvedColumn("Database"),
+					expression.NewUnresolvedColumn("SqlDatabase"),
 					expression.NewLiteral(s.Filter.Like, types.LongText),
 					nil,
 				)

@@ -4871,7 +4871,7 @@ Select * from (
 		Expected: []sql.Row{{"information_schema"}},
 	},
 	{
-		Query:    "SHOW DATABASES where `Database` =  'information_schema'",
+		Query:    "SHOW DATABASES where `SqlDatabase` =  'information_schema'",
 		Expected: []sql.Row{{"information_schema"}},
 	},
 	{

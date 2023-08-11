@@ -664,7 +664,7 @@ func (b *BaseBuilder) buildDropDB(ctx *sql.Context, n *plan.DropDB, row sql.Row)
 		return nil, err
 	}
 
-	// Unsets the current database. Database name is case-insensitive.
+	// Unsets the current database. SqlDatabase name is case-insensitive.
 	if strings.ToLower(ctx.GetCurrentDatabase()) == strings.ToLower(n.DbName) {
 		ctx.SetCurrentDatabase("")
 	}

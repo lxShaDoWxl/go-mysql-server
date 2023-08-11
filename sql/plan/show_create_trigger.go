@@ -37,7 +37,7 @@ var showCreateTriggerSchema = sql.Schema{
 	&sql.Column{Name: "SQL Original Statement", Type: types.LongText, Nullable: false},
 	&sql.Column{Name: "character_set_client", Type: types.LongText, Nullable: false},
 	&sql.Column{Name: "collation_connection", Type: types.LongText, Nullable: false},
-	&sql.Column{Name: "Database Collation", Type: types.LongText, Nullable: false},
+	&sql.Column{Name: "SqlDatabase Collation", Type: types.LongText, Nullable: false},
 	&sql.Column{Name: "Created", Type: types.Datetime, Nullable: false},
 }
 

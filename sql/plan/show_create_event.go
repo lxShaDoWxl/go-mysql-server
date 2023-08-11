@@ -38,7 +38,7 @@ var showCreateEventSchema = sql.Schema{
 	&sql.Column{Name: "Create Event", Type: types.LongText, Nullable: false},
 	&sql.Column{Name: "character_set_client", Type: types.LongText, Nullable: false},
 	&sql.Column{Name: "collation_connection", Type: types.LongText, Nullable: false},
-	&sql.Column{Name: "Database Collation", Type: types.LongText, Nullable: false},
+	&sql.Column{Name: "SqlDatabase Collation", Type: types.LongText, Nullable: false},
 }
 
 // NewShowCreateEvent creates a new ShowCreateEvent node for SHOW CREATE EVENT statements.
@@ -103,7 +103,7 @@ func (s *ShowCreateEvent) RowIter(ctx *sql.Context, row sql.Row) (sql.RowIter, e
 				event.CreateStatement, // Create Event
 				characterSetClient,    // character_set_client
 				collationConnection,   // collation_connection
-				collationServer,       // Database Collation
+				collationServer,       // SqlDatabase Collation
 			}), nil
 		}
 	}

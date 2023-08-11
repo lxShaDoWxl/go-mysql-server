@@ -39,7 +39,7 @@ var showTriggersSchema = sql.Schema{
 	&sql.Column{Name: "Definer", Type: types.LongText, Nullable: false},
 	&sql.Column{Name: "character_set_client", Type: types.LongText, Nullable: false},
 	&sql.Column{Name: "collation_connection", Type: types.LongText, Nullable: false},
-	&sql.Column{Name: "Database Collation", Type: types.LongText, Nullable: false},
+	&sql.Column{Name: "SqlDatabase Collation", Type: types.LongText, Nullable: false},
 }
 
 // NewShowCreateTrigger creates a new ShowCreateTrigger node for SHOW TRIGGER statements.

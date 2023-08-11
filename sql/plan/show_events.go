@@ -43,7 +43,7 @@ var showEventsSchema = sql.Schema{
 	&sql.Column{Name: "Originator", Type: types.Uint64, Nullable: false},
 	&sql.Column{Name: "character_set_client", Type: types.LongText, Nullable: false},
 	&sql.Column{Name: "collation_connection", Type: types.LongText, Nullable: false},
-	&sql.Column{Name: "Database Collation", Type: types.LongText, Nullable: false},
+	&sql.Column{Name: "SqlDatabase Collation", Type: types.LongText, Nullable: false},
 }
 
 // NewShowEvents creates a new ShowEvents node for SHOW EVENTS statements.
@@ -140,7 +140,7 @@ func (s *ShowEvents) RowIter(ctx *sql.Context, row sql.Row) (sql.RowIter, error)
 			0,                   // Originator
 			characterSetClient,  // character_set_client
 			collationConnection, // collation_connection
-			collationServer,     // Database Collation
+			collationServer,     // SqlDatabase Collation
 		})
 	}
 

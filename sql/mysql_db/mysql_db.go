@@ -657,12 +657,12 @@ func (db *MySQLDb) UserHasPrivileges(ctx *sql.Context, operations ...sql.Privile
 	return true
 }
 
-// Name implements the interface sql.Database.
+// Name implements the interface sql.SqlDatabase.
 func (db *MySQLDb) Name() string {
 	return "mysql"
 }
 
-// GetTableInsensitive implements the interface sql.Database.
+// GetTableInsensitive implements the interface sql.SqlDatabase.
 func (db *MySQLDb) GetTableInsensitive(_ *sql.Context, tblName string) (sql.Table, bool, error) {
 	switch strings.ToLower(tblName) {
 	case userTblName:
@@ -688,7 +688,7 @@ func (db *MySQLDb) GetTableInsensitive(_ *sql.Context, tblName string) (sql.Tabl
 	}
 }
 
-// GetTableNames implements the interface sql.Database.
+// GetTableNames implements the interface sql.SqlDatabase.
 func (db *MySQLDb) GetTableNames(ctx *sql.Context) ([]string, error) {
 	return []string{
 		userTblName,

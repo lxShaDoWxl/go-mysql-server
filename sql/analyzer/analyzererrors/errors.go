@@ -62,5 +62,5 @@ var (
 	)
 
 	// ErrReadOnlyDatabase is returned when a write is attempted to a ReadOnlyDatabse.
-	ErrReadOnlyDatabase = errors.NewKind("Database %s is read-only.")
+	ErrReadOnlyDatabase = errors.NewKind("SqlDatabase %s is read-only.")
 )

@@ -1556,7 +1556,7 @@ end;`,
 						"create trigger a1 before insert on a for each row set new.x = new.x + 1", // SQL Original Statement
 						sql.Collation_Default.CharacterSet().String(),                             // character_set_client
 						sql.Collation_Default.String(),                                            // collation_connection
-						sql.Collation_Default.String(),                                            // Database Collation
+						sql.Collation_Default.String(),                                            // SqlDatabase Collation
 						time.Unix(0, 0).UTC(),                                                     // Created
 					},
 				},
@@ -1570,7 +1570,7 @@ end;`,
 						"create trigger b1 before insert on b for each row set new.y = new.y + 2", // SQL Original Statement
 						sql.Collation_Default.CharacterSet().String(),                             // character_set_client
 						sql.Collation_Default.String(),                                            // collation_connection
-						sql.Collation_Default.String(),                                            // Database Collation
+						sql.Collation_Default.String(),                                            // SqlDatabase Collation
 						time.Unix(0, 0).UTC(),                                                     // Created
 					},
 				},
@@ -1607,7 +1607,7 @@ end;`,
 						"",                      // Definer
 						sql.Collation_Default.CharacterSet().String(), // character_set_client
 						sql.Collation_Default.String(),                // collation_connection
-						sql.Collation_Default.String(),                // Database Collation
+						sql.Collation_Default.String(),                // SqlDatabase Collation
 					},
 					{
 						"t2",                    // Trigger
@@ -1620,7 +1620,7 @@ end;`,
 						"",                      // Definer
 						sql.Collation_Default.CharacterSet().String(), // character_set_client
 						sql.Collation_Default.String(),                // collation_connection
-						sql.Collation_Default.String(),                // Database Collation
+						sql.Collation_Default.String(),                // SqlDatabase Collation
 					},
 					{
 						"t3",                             // Trigger
@@ -1633,7 +1633,7 @@ end;`,
 						"",                               // Definer
 						sql.Collation_Default.CharacterSet().String(), // character_set_client
 						sql.Collation_Default.String(),                // collation_connection
-						sql.Collation_Default.String(),                // Database Collation
+						sql.Collation_Default.String(),                // SqlDatabase Collation
 					},
 					{
 						"t4",                    // Trigger
@@ -1646,7 +1646,7 @@ end;`,
 						"",                      // Definer
 						sql.Collation_Default.CharacterSet().String(), // character_set_client
 						sql.Collation_Default.String(),                // collation_connection
-						sql.Collation_Default.String(),                // Database Collation
+						sql.Collation_Default.String(),                // SqlDatabase Collation
 					},
 				},
 			},
@@ -1664,7 +1664,7 @@ end;`,
 						"",                      // Definer
 						sql.Collation_Default.CharacterSet().String(), // character_set_client
 						sql.Collation_Default.String(),                // collation_connection
-						sql.Collation_Default.String(),                // Database Collation
+						sql.Collation_Default.String(),                // SqlDatabase Collation
 					},
 					{
 						"t2",                    // Trigger
@@ -1677,7 +1677,7 @@ end;`,
 						"",                      // Definer
 						sql.Collation_Default.CharacterSet().String(), // character_set_client
 						sql.Collation_Default.String(),                // collation_connection
-						sql.Collation_Default.String(),                // Database Collation
+						sql.Collation_Default.String(),                // SqlDatabase Collation
 					},
 					{
 						"t3",                             // Trigger
@@ -1690,7 +1690,7 @@ end;`,
 						"",                               // Definer
 						sql.Collation_Default.CharacterSet().String(), // character_set_client
 						sql.Collation_Default.String(),                // collation_connection
-						sql.Collation_Default.String(),                // Database Collation
+						sql.Collation_Default.String(),                // SqlDatabase Collation
 					},
 					{
 						"t4",                    // Trigger
@@ -1703,7 +1703,7 @@ end;`,
 						"",                      // Definer
 						sql.Collation_Default.CharacterSet().String(), // character_set_client
 						sql.Collation_Default.String(),                // collation_connection
-						sql.Collation_Default.String(),                // Database Collation
+						sql.Collation_Default.String(),                // SqlDatabase Collation
 					},
 				},
 			},
@@ -1721,7 +1721,7 @@ end;`,
 						"",                               // Definer
 						sql.Collation_Default.CharacterSet().String(), // character_set_client
 						sql.Collation_Default.String(),                // collation_connection
-						sql.Collation_Default.String(),                // Database Collation
+						sql.Collation_Default.String(),                // SqlDatabase Collation
 					},
 					{
 						"t4",                    // Trigger
@@ -1734,7 +1734,7 @@ end;`,
 						"",                      // Definer
 						sql.Collation_Default.CharacterSet().String(), // character_set_client
 						sql.Collation_Default.String(),                // collation_connection
-						sql.Collation_Default.String(),                // Database Collation
+						sql.Collation_Default.String(),                // SqlDatabase Collation
 					},
 				},
 			},
@@ -1752,7 +1752,7 @@ end;`,
 						"",                      // Definer
 						sql.Collation_Default.CharacterSet().String(), // character_set_client
 						sql.Collation_Default.String(),                // collation_connection
-						sql.Collation_Default.String(),                // Database Collation
+						sql.Collation_Default.String(),                // SqlDatabase Collation
 					},
 					{
 						"t2",                    // Trigger
@@ -1765,7 +1765,7 @@ end;`,
 						"",                      // Definer
 						sql.Collation_Default.CharacterSet().String(), // character_set_client
 						sql.Collation_Default.String(),                // collation_connection
-						sql.Collation_Default.String(),                // Database Collation
+						sql.Collation_Default.String(),                // SqlDatabase Collation
 					},
 					{
 						"t3",                             // Trigger
@@ -1778,7 +1778,7 @@ end;`,
 						"",                               // Definer
 						sql.Collation_Default.CharacterSet().String(), // character_set_client
 						sql.Collation_Default.String(),                // collation_connection
-						sql.Collation_Default.String(),                // Database Collation
+						sql.Collation_Default.String(),                // SqlDatabase Collation
 					},
 				},
 			},
@@ -1796,7 +1796,7 @@ end;`,
 						"",                               // Definer
 						sql.Collation_Default.CharacterSet().String(), // character_set_client
 						sql.Collation_Default.String(),                // collation_connection
-						sql.Collation_Default.String(),                // Database Collation
+						sql.Collation_Default.String(),                // SqlDatabase Collation
 					},
 				},
 			},
@@ -1814,7 +1814,7 @@ end;`,
 						"",                      // Definer
 						sql.Collation_Default.CharacterSet().String(), // character_set_client
 						sql.Collation_Default.String(),                // collation_connection
-						sql.Collation_Default.String(),                // Database Collation
+						sql.Collation_Default.String(),                // SqlDatabase Collation
 					},
 					{
 						"t2",                    // Trigger
@@ -1827,7 +1827,7 @@ end;`,
 						"",                      // Definer
 						sql.Collation_Default.CharacterSet().String(), // character_set_client
 						sql.Collation_Default.String(),                // collation_connection
-						sql.Collation_Default.String(),                // Database Collation
+						sql.Collation_Default.String(),                // SqlDatabase Collation
 					},
 				},
 			},
@@ -2082,7 +2082,7 @@ end;`,
 		Name: "insert, update, delete triggers with non-existent table in trigger body",
 		SetUpScript: []string{
 			"CREATE TABLE film (film_id smallint unsigned NOT NULL AUTO_INCREMENT, title varchar(128) NOT NULL, description text, PRIMARY KEY (film_id))",
-			"INSERT INTO `film` VALUES (1,'ACADEMY DINOSAUR','A Epic Drama in The Canadian Rockies'),(2,'ACE GOLDFINGER','An Astounding Epistle of a Database Administrator in Ancient China');",
+			"INSERT INTO `film` VALUES (1,'ACADEMY DINOSAUR','A Epic Drama in The Canadian Rockies'),(2,'ACE GOLDFINGER','An Astounding Epistle of a SqlDatabase Administrator in Ancient China');",
 		},
 		Assertions: []ScriptTestAssertion{
 			{

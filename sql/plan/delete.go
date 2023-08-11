@@ -86,7 +86,7 @@ func (p *DeleteFrom) Resolved() bool {
 	return true
 }
 
-// DB returns the database being deleted from. |Database| is used by another interface we implement.
+// DB returns the database being deleted from. |SqlDatabase| is used by another interface we implement.
 func (p *DeleteFrom) DB() sql.Database {
 	return getDatabase(p.Child)
 }

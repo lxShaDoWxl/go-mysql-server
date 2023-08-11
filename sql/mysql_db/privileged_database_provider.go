@@ -23,7 +23,7 @@ import (
 )
 
 // PrivilegedDatabaseProvider is a wrapper around a normal sql.DatabaseProvider that takes a context's client's
-// privileges into consideration when returning a sql.Database. In addition, any returned databases are wrapped with
+// privileges into consideration when returning a sql.SqlDatabase. In addition, any returned databases are wrapped with
 // PrivilegedDatabase.
 type PrivilegedDatabaseProvider struct {
 	grantTables *MySQLDb
@@ -125,7 +125,7 @@ func (pdp PrivilegedDatabaseProvider) usernameFromCtx(ctx *sql.Context) string {
 	return User{User: client.User, Host: client.Address}.UserHostToString("'")
 }
 
-// PrivilegedDatabase is a wrapper around a normal sql.Database that takes a context's client's privileges into
+// PrivilegedDatabase is a wrapper around a normal sql.SqlDatabase that takes a context's client's privileges into
 // consideration when returning a sql.Table.
 type PrivilegedDatabase struct {
 	grantTables *MySQLDb
@@ -156,12 +156,12 @@ func NewPrivilegedDatabase(grantTables *MySQLDb, db sql.Database) sql.Database {
 	}
 }
 
-// Name implements the interface sql.Database.
+// Name implements the interface sql.SqlDatabase.
 func (pdb PrivilegedDatabase) Name() string {
 	return pdb.db.Name()
 }
 
-// GetTableInsensitive implements the interface sql.Database.
+// GetTableInsensitive implements the interface sql.SqlDatabase.
 func (pdb PrivilegedDatabase) GetTableInsensitive(ctx *sql.Context, tblName string) (sql.Table, bool, error) {
 	checkName := pdb.db.Name()
 	if adb, ok := pdb.db.(sql.AliasedDatabase); ok {
@@ -184,7 +184,7 @@ func (pdb PrivilegedDatabase) GetTableInsensitive(ctx *sql.Context, tblName stri
 	return pdb.db.GetTableInsensitive(ctx, tblName)
 }
 
-// GetTableNames implements the interface sql.Database.
+// GetTableNames implements the interface sql.SqlDatabase.
 func (pdb PrivilegedDatabase) GetTableNames(ctx *sql.Context) ([]string, error) {
 	var tablesWithAccess []string
 	var err error
@@ -487,7 +487,7 @@ func (pdb PrivilegedDatabase) SetCollation(ctx *sql.Context, collation sql.Colla
 	return sql.ErrDatabaseCollationsNotSupported.New(pdb.db.Name())
 }
 
-// Unwrap returns the wrapped sql.Database.
+// Unwrap returns the wrapped sql.SqlDatabase.
 func (pdb PrivilegedDatabase) Unwrap() sql.Database {
 	return pdb.db
 }

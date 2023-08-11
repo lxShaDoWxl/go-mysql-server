@@ -754,7 +754,7 @@ var UserPrivTests = []UserPrivilegeTest{
 		},
 	},
 	{
-		Name: "Database-level privileges exist",
+		Name: "SqlDatabase-level privileges exist",
 		SetUpScript: []string{
 			"CREATE USER tester@localhost;",
 		},

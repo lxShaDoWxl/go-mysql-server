@@ -45,7 +45,7 @@ func (*ShowDatabases) Children() []sql.Node {
 // Schema implements the Node interface.
 func (*ShowDatabases) Schema() sql.Schema {
 	return sql.Schema{{
-		Name:     "Database",
+		Name:     "SqlDatabase",
 		Type:     types.LongText,
 		Nullable: false,
 	}}

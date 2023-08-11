@@ -28,8 +28,8 @@ type ShowCreateDatabase struct {
 }
 
 var showCreateDatabaseSchema = sql.Schema{
-	{Name: "Database", Type: types.LongText},
-	{Name: "Create Database", Type: types.LongText},
+	{Name: "SqlDatabase", Type: types.LongText},
+	{Name: "Create SqlDatabase", Type: types.LongText},
 }
 
 // NewShowCreateDatabase creates a new ShowCreateDatabase node.

@@ -23,7 +23,7 @@ import (
 )
 
 // resolveDatabases sets a database for nodes that implement sql.Databaser. Replaces sql.UnresolvedDatabase with the
-// actual sql.Database implementation from the catalog. Also sets the database provider for nodes that implement
+// actual sql.SqlDatabase implementation from the catalog. Also sets the database provider for nodes that implement
 // sql.MultiDatabaser.
 func resolveDatabases(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope, sel RuleSelector) (sql.Node, transform.TreeIdentity, error) {
 	span, ctx := ctx.Span("resolve_database")

@@ -2260,7 +2260,7 @@ var ProcedureShowStatus = []ScriptTest{
 						"hi",                  // Comment
 						"utf8mb4",             // character_set_client
 						"utf8mb4_0900_bin",    // collation_connection
-						"utf8mb4_0900_bin",    // Database Collation
+						"utf8mb4_0900_bin",    // SqlDatabase Collation
 					},
 					{
 						"mydb",                // Db
@@ -2273,7 +2273,7 @@ var ProcedureShowStatus = []ScriptTest{
 						"",                    // Comment
 						"utf8mb4",             // character_set_client
 						"utf8mb4_0900_bin",    // collation_connection
-						"utf8mb4_0900_bin",    // Database Collation
+						"utf8mb4_0900_bin",    // SqlDatabase Collation
 					},
 					{
 						"mydb",                // Db
@@ -2286,7 +2286,7 @@ var ProcedureShowStatus = []ScriptTest{
 						"",                    // Comment
 						"utf8mb4",             // character_set_client
 						"utf8mb4_0900_bin",    // collation_connection
-						"utf8mb4_0900_bin",    // Database Collation
+						"utf8mb4_0900_bin",    // SqlDatabase Collation
 					},
 				},
 			},
@@ -2304,7 +2304,7 @@ var ProcedureShowStatus = []ScriptTest{
 						"",                    // Comment
 						"utf8mb4",             // character_set_client
 						"utf8mb4_0900_bin",    // collation_connection
-						"utf8mb4_0900_bin",    // Database Collation
+						"utf8mb4_0900_bin",    // SqlDatabase Collation
 					},
 					{
 						"mydb",                // Db
@@ -2317,7 +2317,7 @@ var ProcedureShowStatus = []ScriptTest{
 						"",                    // Comment
 						"utf8mb4",             // character_set_client
 						"utf8mb4_0900_bin",    // collation_connection
-						"utf8mb4_0900_bin",    // Database Collation
+						"utf8mb4_0900_bin",    // SqlDatabase Collation
 					},
 				},
 			},
@@ -2339,7 +2339,7 @@ var ProcedureShowStatus = []ScriptTest{
 						"hi",                  // Comment
 						"utf8mb4",             // character_set_client
 						"utf8mb4_0900_bin",    // collation_connection
-						"utf8mb4_0900_bin",    // Database Collation
+						"utf8mb4_0900_bin",    // SqlDatabase Collation
 					},
 					{
 						"mydb",                // Db
@@ -2352,7 +2352,7 @@ var ProcedureShowStatus = []ScriptTest{
 						"",                    // Comment
 						"utf8mb4",             // character_set_client
 						"utf8mb4_0900_bin",    // collation_connection
-						"utf8mb4_0900_bin",    // Database Collation
+						"utf8mb4_0900_bin",    // SqlDatabase Collation
 					},
 					{
 						"mydb",                // Db
@@ -2365,7 +2365,7 @@ var ProcedureShowStatus = []ScriptTest{
 						"",                    // Comment
 						"utf8mb4",             // character_set_client
 						"utf8mb4_0900_bin",    // collation_connection
-						"utf8mb4_0900_bin",    // Database Collation
+						"utf8mb4_0900_bin",    // SqlDatabase Collation
 					},
 				},
 			},
@@ -2383,7 +2383,7 @@ var ProcedureShowStatus = []ScriptTest{
 						"hi",                  // Comment
 						"utf8mb4",             // character_set_client
 						"utf8mb4_0900_bin",    // collation_connection
-						"utf8mb4_0900_bin",    // Database Collation
+						"utf8mb4_0900_bin",    // SqlDatabase Collation
 					},
 					{
 						"mydb",                // Db
@@ -2396,7 +2396,7 @@ var ProcedureShowStatus = []ScriptTest{
 						"",                    // Comment
 						"utf8mb4",             // character_set_client
 						"utf8mb4_0900_bin",    // collation_connection
-						"utf8mb4_0900_bin",    // Database Collation
+						"utf8mb4_0900_bin",    // SqlDatabase Collation
 					},
 				},
 			},
@@ -2414,7 +2414,7 @@ var ProcedureShowStatus = []ScriptTest{
 						"",                    // Comment
 						"utf8mb4",             // character_set_client
 						"utf8mb4_0900_bin",    // collation_connection
-						"utf8mb4_0900_bin",    // Database Collation
+						"utf8mb4_0900_bin",    // SqlDatabase Collation
 					},
 				},
 			},
@@ -2432,7 +2432,7 @@ var ProcedureShowStatus = []ScriptTest{
 						"hi",                  // Comment
 						"utf8mb4",             // character_set_client
 						"utf8mb4_0900_bin",    // collation_connection
-						"utf8mb4_0900_bin",    // Database Collation
+						"utf8mb4_0900_bin",    // SqlDatabase Collation
 					},
 					{
 						"mydb",                // Db
@@ -2445,7 +2445,7 @@ var ProcedureShowStatus = []ScriptTest{
 						"",                    // Comment
 						"utf8mb4",             // character_set_client
 						"utf8mb4_0900_bin",    // collation_connection
-						"utf8mb4_0900_bin",    // Database Collation
+						"utf8mb4_0900_bin",    // SqlDatabase Collation
 					},
 					{
 						"mydb",                // Db
@@ -2458,7 +2458,7 @@ var ProcedureShowStatus = []ScriptTest{
 						"",                    // Comment
 						"utf8mb4",             // character_set_client
 						"utf8mb4_0900_bin",    // collation_connection
-						"utf8mb4_0900_bin",    // Database Collation
+						"utf8mb4_0900_bin",    // SqlDatabase Collation
 					},
 				},
 			},
@@ -2484,7 +2484,7 @@ var ProcedureShowCreate = []ScriptTest{
 						"CREATE PROCEDURE p1() COMMENT 'hi' DETERMINISTIC SELECT 6", // Create Procedure
 						"utf8mb4",          // character_set_client
 						"utf8mb4_0900_bin", // collation_connection
-						"utf8mb4_0900_bin", // Database Collation
+						"utf8mb4_0900_bin", // SqlDatabase Collation
 					},
 				},
 			},
@@ -2497,7 +2497,7 @@ var ProcedureShowCreate = []ScriptTest{
 						"CREATE definer=`user` PROCEDURE p2() SQL SECURITY INVOKER SELECT 7", // Create Procedure
 						"utf8mb4",          // character_set_client
 						"utf8mb4_0900_bin", // collation_connection
-						"utf8mb4_0900_bin", // Database Collation
+						"utf8mb4_0900_bin", // SqlDatabase Collation
 					},
 				},
 			},
@@ -2510,7 +2510,7 @@ var ProcedureShowCreate = []ScriptTest{
 						"CREATE PROCEDURE p21() SQL SECURITY DEFINER SELECT 8", // Create Procedure
 						"utf8mb4",          // character_set_client
 						"utf8mb4_0900_bin", // collation_connection
-						"utf8mb4_0900_bin", // Database Collation
+						"utf8mb4_0900_bin", // SqlDatabase Collation
 					},
 				},
 			},
