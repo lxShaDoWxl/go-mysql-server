@@ -88,7 +88,7 @@ var (
 )
 
 type datetimeType struct {
-	baseType query.Type
+	baseType  query.Type
 	precision int
 }
 
@@ -100,7 +100,7 @@ func CreateDatetimeType(baseType query.Type, precision int) (sql.DatetimeType, e
 	switch baseType {
 	case sqltypes.Date, sqltypes.Datetime, sqltypes.Timestamp:
 		return datetimeType{
-			baseType: baseType,
+			baseType:  baseType,
 			precision: precision,
 		}, nil
 	}
@@ -166,7 +166,7 @@ func (t datetimeType) Convert(v interface{}) (interface{}, sql.ConvertInRange, e
 
 // precisionConversion is a conversion ratio to divide time.Second by to truncate the appropriate amount for the
 // precision of a type with time info
-var precisionConversion = [7]int {
+var precisionConversion = [7]int{
 	1, 10, 100, 1_000, 10_000, 100_000, 1_000_000,
 }
 
@@ -183,7 +183,7 @@ func ConvertToTime(v interface{}, t datetimeType) (time.Time, error) {
 	if res.Equal(zeroTime) {
 		return zeroTime, nil
 	}
-	
+
 	// Truncate the date to the precision of this type
 	truncationDuration := time.Second
 	truncationDuration /= time.Duration(precisionConversion[t.precision])
